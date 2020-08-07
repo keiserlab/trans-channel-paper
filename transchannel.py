@@ -40,26 +40,19 @@ import matplotlib.pyplot as plt
 
 
 class ImageDataset(Dataset):
-    """AI in Cell dataset of images. csv_file should be a csv of x,t pairs of full path strings, pointing to images."""
+    """
+    AI in Cell dataset of images. csv_file should be a csv of x,t pairs of full path strings, pointing to images.
+    x is the YFP-tau image name, and t is the AT8-pTau image name
+    """
     def __init__(self, csv_file, transform=None):
         self.transform = transform
         self.data = pd.read_csv(csv_file).values
-
+    
     def __len__(self):
         return len(self.data)
-
+    
     def __getitem__(self, idx):
-        x, t = self.data[idx]
-        if "keiserlab" not in hostname: #if on butte lab server 
-            x = x.replace("/fast/disk0/dwong/", "/data1/wongd/")
-            t = t.replace("/fast/disk0/dwong/", "/data1/wongd/")
-            x = x.replace("/srv/nas/mk3/users/dwong/", "/data1/wongd/") 
-            t = t.replace("/srv/nas/mk3/users/dwong/", "/data1/wongd/")
-        else: #if on keiser server
-            x = x.replace("/data1/wongd/", "/srv/nas/mk3/users/dwong/")
-            t = t.replace("/data1/wongd/", "/srv/nas/mk3/users/dwong/")
-            x = x.replace("/fast/disk0/dwong/", "/srv/nas/mk3/users/dwong/")
-            t = t.replace("/fast/disk0/dwong/", "/srv/nas/mk3/users/dwong/")
+        x, t = self.data[idx] 
         if normalize == "scale":
             x_img = cv2.imread(x, cv2.IMREAD_UNCHANGED) #for enhanced images, will be 3 channel; for raw images will be 1 channel 
             x_img = x_img.astype(np.float32)
@@ -77,9 +70,10 @@ class ImageDataset(Dataset):
 
 class AblationDataset(Dataset):
     """
-    dataset in which we ablate the bottom x% of pixels to be 0 valued.
-    This is to test if image bleed through is an issue.
-    csv_file should be a csv of x,t pairs of full path strings, pointing to images.
+    dataset in which we ablate the bottom x% of pixels to be 0 valued
+    This is to test if image bleed through is an issue
+    csv_file should be a csv of x,t pairs of full path strings, pointing to images
+    x is the YFP-tau image name, and t is the AT8-pTau image name
     """
     def __init__(self, csv_file, thresh_percent, transform=None):
         self.transform = transform
@@ -91,15 +85,6 @@ class AblationDataset(Dataset):
 
     def __getitem__(self, idx):
         x, t = self.data[idx]
-
-        if "keiserlab" not in hostname: #if on butte lab server 
-            x = x.replace("/fast/disk0/dwong/", "/data1/wongd/")
-            t = t.replace("/fast/disk0/dwong/", "/data1/wongd/")
-            x = x.replace("/srv/nas/mk3/users/dwong/", "/data1/wongd/") 
-            t = t.replace("/srv/nas/mk3/users/dwong/", "/data1/wongd/")
-        else: #if on keiser server
-            x = x.replace("/data1/wongd/", "/srv/nas/mk3/users/dwong/")
-            t = t.replace("/data1/wongd/", "/srv/nas/mk3/users/dwong/")
         x_img = cv2.imread(x, cv2.IMREAD_UNCHANGED) 
         x_img = x_img.astype(np.float32)
         x_img = ((x_img - inputMin) / (inputMax - inputMin)) * 255
@@ -603,24 +588,6 @@ def getNullMSE(sample_size):
     print("null YFP peformance (mse): ", np.mean(null_YFP_performance), np.std(null_YFP_performance))
     print("null DAPI peformance (mse): ", np.mean(null_DAPI_performance), np.std(null_DAPI_performance))
 
-def getNullByIntensityMethod():
-    """
-    gets the null performance at different ablation levels
-    """
-    ablations = list(np.arange(0, 1.1, .1))
-    for a in ablations:
-        j = 0
-        performance = []
-        dataset = AblationDataset(csv_name, a) 
-        ablation_generator = data.DataLoader(dataset,sampler=test_sampler, **test_params)
-        total_step = len(ablation_generator)
-        with torch.set_grad_enabled(False):
-            for local_batch, local_labels in ablation_generator:
-                j += 1
-                local_batch, local_labels = local_batch.to(device), local_labels.to(device)
-                pearson = getPearson(local_batch, local_labels)
-                performance.append(pearson)
-        print("ablation: ", a, " global null performance: ", np.mean(performance))
 
 def plotPixelDistributions(sample_size, exclude_0_valued_pixels=False, display_pixel_max=255):
     """
@@ -1049,19 +1016,19 @@ optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=.9)
 #============================================================================
 #============================================================================
 
-# train()
-# test(100000)
-# getMSE(100000) 
-# getNull()
-# getNullMSE(100000)
-# getNullByIntensityMethod()
+train()
+test(100000)
+getMSE(100000) 
+getNull()
+getNullMSE(100000)
+getROC(lab_thresh=2.0, sample_size=1000000)
+ablationTest(10, ablate_DAPI_only=False)
+
 # plotPixelDistributions(sample_size=1000000000, exclude_0_valued_pixels=False, display_pixel_max=20)
 # getStats(1000000)
-# getROC(lab_thresh=2.0, sample_size=1000000)
 # getOverlap(1000000)
 # getFractionalAT8InYFP(1)
 # findStats()
-# ablationTest(10, ablate_DAPI_only=False)
 
 
 
