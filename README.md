@@ -22,11 +22,10 @@ Hardware Requirements:
 All deep learning models were trained using NVIDIA 1080 GPUs
 
 Content:
-	Scripts:
-	transchannel.py contains the majority of the necessary code to reproduce the main results of the tau portion of the paper
-	osteosarcoma.py contains the code necessary to train and evaluate the model on the independent osteosarcoma dataset
-	Models:
-	fully trained models, including the model we trained and applied to the archival HCS, the 3 cross-validation models applied to an expanded dataset with negative controls (see Supplement), along with the 3 models trained with 3-fold cross-validation on the independent osteosarcoma dataset 
+transchannel.py contains the majority of the necessary code to reproduce the main results of the tau portion of the paper
+osteosarcoma.py contains the code necessary to train and evaluate the model on the independent osteosarcoma dataset
+models:
+fully trained models, including the model we trained and applied to the archival HCS, the 3 cross-validation models applied to an expanded dataset with negative controls (see Supplement), along with the 3 models trained with 3-fold cross-validation on the independent osteosarcoma dataset 
 
 
 
