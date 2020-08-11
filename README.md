@@ -5,16 +5,22 @@ The following python packages are required:
 torch, torchvision, pandas, cv2, numpy, sklearn, pickle, matplotlib
 
 Hardware Requirements:
-All deep learning models were trained using NVIDIA 1080 GPUs
+All deep learning models were trained using Nvidia Geforce GTX 1080 GPUs
 
 Content:
 
-transchannel.py contains the majority of the necessary code to reproduce the main results of the tau portion of the paper
+transchannel.py contains the majority of the necessary code to reproduce the main results of the tau portion of the paper. This script can be run with a command such as "python transchannel.py {FOLD NUMBER}". See the documentation within this script for specifics.  
 
 osteosarcoma.py contains the code necessary to train and evaluate the model on the independent osteosarcoma dataset
 
+ExampleFigureGenerator.ipynb contains example code to reproduce the main performance results for the tau dataset
+
 models:
 fully trained models, including the model we trained and applied to the archival HCS, the 3 cross-validation models applied to an expanded dataset with negative controls (see Supplement), along with the 3 models trained with 3-fold cross-validation on the independent osteosarcoma dataset 
+
+
+
+
 
 
 
