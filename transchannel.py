@@ -125,127 +125,6 @@ class Unet_mod(nn.Module):
         h20 = nn.functional.relu(self.conv13(torch.cat((h0,h19), dim=1))) 
         return h20
 
-def getROC(lab_thresh, sample_size):
-    """
-    LAB_THRESH is the pixel threshold that we use to binarize our label image 
-    SAMPLE_SIZE specifies how many images we want to include in this analysis
-    Plots and saves ROC curves for YFP Null Model, DAPI Null Model, and the actual ML model, 
-    Pickles the coordinates of the different curves, and saves to pickles/
-    """
-    if fold in [1,2,3]:
-        loadName = "models/cross_validate_fold{}cross_validating_Unet_mod_continue_training.pt".format(fold)
-    else:
-        loadName = "models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt" #model used for archival HCS image validation
-    checkpoint = torch.load(loadName)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    model.eval()
-    mapp = {}
-    null_mapp = {}
-    null_DAPI_mapp = {}
-    threshs = list(np.arange(0, .9, .1)) #threshs are the various thresholds that we will use to binarize our predicted label images
-    threshs += list(np.arange(.90, 1.1, .01))
-    threshs +=  list(np.arange(1.1, 2, .1)) 
-    threshs +=  list(np.arange(2, 5, 1)) 
-    threshs.append(30) 
-    threshs.append(1000)
-    for t in threshs:
-        mapp[t] = [] #thresh to list of (FPR, TPR) points
-        null_mapp[t] = []
-        null_DAPI_mapp[t] = []
-    with torch.set_grad_enabled(False):
-        j = 0
-        for local_batch, local_labels in validation_generator:
-            local_batch, local_labels = local_batch.to(device), local_labels.to(device)
-            outputs = model(local_batch)
-            for t in threshs:
-                TPR, TNR, PPV, NPV, FNR, FPR = getMetrics(outputs, local_labels, lab_thresh=lab_thresh, pred_thresh=t)
-                null_TPR, null_TNR, null_PPV, null_NPV, null_FNR, null_FPR = getMetrics(local_batch[:,0,:,:], local_labels, lab_thresh=lab_thresh, pred_thresh=t, isNull=True)
-                null_DAPI_TPR, null_DAPI_TNR, null_DAPI_PPV, null_DAPI_NPV, null_DAPI_FNR, null_DAPI_FPR = getMetrics(local_batch[:,1,:,:], local_labels, lab_thresh=lab_thresh, pred_thresh=t, isNull=True) #for NULL AUC
-                mapp[t].append((FPR, TPR))
-                null_mapp[t].append((null_FPR, null_TPR))
-                null_DAPI_mapp[t].append((null_DAPI_FPR, null_DAPI_TPR))
-            j += 1
-            if j > sample_size:
-                break
-        ##generate both ROC curves, one for model, one for null 
-        i = 0
-        for m in [null_mapp, null_DAPI_mapp, mapp]:
-            coordinates = [] #list of tuples (thresh, FPR, TPR) to plot
-            for key in m:
-                FPRs = [l[0] for l in m[key]]
-                TPRs = [l[1] for l in m[key]]
-                coordinates.append((key, np.mean(FPRs), np.mean(TPRs)))
-            coordinates = sorted(coordinates, key=lambda x: x[0])
-            labels = [t[0] for t in coordinates] 
-            x = [t[1] for t in coordinates]
-            y = [t[2] for t in coordinates]
-            if i == 0:
-                pickle.dump(x, open("pickles/null_mapp_x_values_fold_{}.pk".format(fold), "wb"))
-                pickle.dump(y, open("pickles/null_mapp_y_values_fold_{}.pk".format(fold),  "wb"))
-            if i == 1:
-                pickle.dump(x, open("pickles/null_DAPI_mapp_x_values_fold_{}.pk".format(fold), "wb"))
-                pickle.dump(y, open("pickles/null_DAPI_mapp_y_values_fold_{}.pk".format(fold), "wb"))
-            if i == 2:
-                print("dumping pickle")
-                pickle.dump(x, open("pickles/mapp_x_values_fold_{}.pk".format(fold), "wb"))
-                pickle.dump(y, open("pickles/mapp_y_values_fold_{}.pk".format(fold), "wb"))
-            i += 1
-            labels, x, y = labels[::-1], x[::-1], y[::-1]
-            auc = np.trapz(y,x)
-            print("AUC: ", auc)
-            plt.plot(x,y,linewidth=2.0)
-        plt.xlabel("FPR")
-        plt.ylabel("TPR")
-        plt.plot([0, .5, 1], [0,.5, 1], linewidth=1.0)
-        plt.xlim([0,1])
-        plt.ylim([0,1])
-        plt.title("Reciever Operating Characteristic AUC = " + str(auc))
-        plt.savefig('ROC_cross_validate_fold_{}_thresh='.format(fold) + str(lab_thresh) + "_sample_size" + str(sample_size) +"_" + loadName.replace("models/", "") + '.png')
-
-def getMetrics(predicted, labels, lab_thresh=None, pred_thresh=None):
-    """
-    PREDICTED and LABELS are the predicted and label image tensors
-    LAB_THRESH and PRED_THRESH are the pixel thresholds at which signal >= thresh is called positive, else negative
-    returns TPR, TNR, PPV, NPV, FNR, FPR for batch of images PREDICTED and LABELS
-    """
-    predicted = predicted.cpu().numpy()
-    labels = labels.cpu().numpy()
-
-    for i in range(0, len(labels)):
-        ##put images back in original space
-        lab = labels[i].reshape((img_dim,img_dim))
-        pred = predicted[i].reshape((img_dim,img_dim))
-        lab = (lab / 255) * 65535.0  
-        pred = (pred / 255) * 65535.0      
-        ##normalize image to have mean = 0, variance = 1
-        lmean, lstd = np.mean(lab), np.std(lab)
-        pmean, pstd = np.mean(pred), np.std(pred)
-        lab = ((lab - lmean) /float(lstd))
-        pred = ((pred - pmean) /float(pstd))
-        ##calculate relevant statistics
-        true_positive = np.sum(np.where((pred >= pred_thresh) & (lab >= lab_thresh), 1, 0))
-        true_negative = np.sum(np.where((pred < pred_thresh) & (lab < lab_thresh), 1, 0))
-        false_positive = np.sum(np.where((pred >= pred_thresh) & (lab < lab_thresh), 1, 0))
-        false_negative = np.sum(np.where((pred < pred_thresh) & (lab >= lab_thresh), 1, 0))
-        TPR = true_positive / float(true_positive + false_negative )
-        TNR = true_negative / float(true_negative + false_positive )
-        PPV = true_positive / float(true_positive + false_positive )
-        NPV = true_negative / float(true_negative + false_negative )
-        FNR = false_negative / float(false_negative + true_positive )
-        FPR = false_positive / float(false_positive + true_negative ) 
-        if math.isnan(TPR) or math.isnan(TNR) or math.isnan(PPV) or math.isnan(NPV) or math.isnan(FNR) or math.isnan(FPR):
-            TPR = 0 if math.isnan(TPR) else TPR
-            TNR = 0 if math.isnan(TNR) else TNR
-            PPV = 0 if math.isnan(PPV) else PPV
-            NPV = 0 if math.isnan(NPV) else NPV
-            FNR = 0 if math.isnan(FNR) else FNR
-            FPR = 0 if math.isnan(FPR) else FPR
-            return TPR, TNR, PPV, NPV, FNR, FPR
-        ##error catching - never occured
-        if math.isnan(TPR) or math.isnan(FPR):
-            print("TPR or FPR is nan with lab/pred thresh: ", lab_thresh, pred_thresh)
-    return TPR, TNR, PPV, NPV, FNR, FPR
 
 def train():
     """
@@ -334,6 +213,84 @@ def test(sample_size):
     print("global performance: ", np.mean(performance), np.std(performance))
     print("global loss: ", running_loss / float(j))
     pickle.dump((np.mean(performance), np.std(performance)), open("pickles/ML_model_pearson_performance.pkl", "wb"))
+
+def getROC(lab_thresh, sample_size):
+    """
+    LAB_THRESH is the pixel threshold that we use to binarize our label image 
+    SAMPLE_SIZE specifies how many images we want to include in this analysis
+    Plots and saves ROC curves for YFP Null Model, DAPI Null Model, and the actual ML model, 
+    Pickles the coordinates of the different curves, and saves to pickles/
+    """
+    if fold in [1,2,3]:
+        loadName = "models/cross_validate_fold{}cross_validating_Unet_mod_continue_training.pt".format(fold)
+    else:
+        loadName = "models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt" #model used for archival HCS image validation
+    checkpoint = torch.load(loadName)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    model.eval()
+    mapp = {}
+    null_mapp = {}
+    null_DAPI_mapp = {}
+    threshs = list(np.arange(0, .9, .1)) #threshs are the various thresholds that we will use to binarize our predicted label images
+    threshs += list(np.arange(.90, 1.1, .01))
+    threshs +=  list(np.arange(1.1, 2, .1)) 
+    threshs +=  list(np.arange(2, 5, 1)) 
+    threshs.append(30) 
+    threshs.append(1000)
+    for t in threshs:
+        mapp[t] = [] #thresh to list of (FPR, TPR) points
+        null_mapp[t] = []
+        null_DAPI_mapp[t] = []
+    with torch.set_grad_enabled(False):
+        j = 0
+        for local_batch, local_labels in validation_generator:
+            local_batch, local_labels = local_batch.to(device), local_labels.to(device)
+            outputs = model(local_batch)
+            for t in threshs:
+                TPR, TNR, PPV, NPV, FNR, FPR = getMetrics(outputs, local_labels, lab_thresh=lab_thresh, pred_thresh=t)
+                null_TPR, null_TNR, null_PPV, null_NPV, null_FNR, null_FPR = getMetrics(local_batch[:,0,:,:], local_labels, lab_thresh=lab_thresh, pred_thresh=t, isNull=True)
+                null_DAPI_TPR, null_DAPI_TNR, null_DAPI_PPV, null_DAPI_NPV, null_DAPI_FNR, null_DAPI_FPR = getMetrics(local_batch[:,1,:,:], local_labels, lab_thresh=lab_thresh, pred_thresh=t, isNull=True) #for NULL AUC
+                mapp[t].append((FPR, TPR))
+                null_mapp[t].append((null_FPR, null_TPR))
+                null_DAPI_mapp[t].append((null_DAPI_FPR, null_DAPI_TPR))
+            j += 1
+            if j > sample_size:
+                break
+        ##generate both ROC curves, one for model, one for null 
+        i = 0
+        for m in [null_mapp, null_DAPI_mapp, mapp]:
+            coordinates = [] #list of tuples (thresh, FPR, TPR) to plot
+            for key in m:
+                FPRs = [l[0] for l in m[key]]
+                TPRs = [l[1] for l in m[key]]
+                coordinates.append((key, np.mean(FPRs), np.mean(TPRs)))
+            coordinates = sorted(coordinates, key=lambda x: x[0])
+            labels = [t[0] for t in coordinates] 
+            x = [t[1] for t in coordinates]
+            y = [t[2] for t in coordinates]
+            if i == 0:
+                pickle.dump(x, open("pickles/null_mapp_x_values_fold_{}.pk".format(fold), "wb"))
+                pickle.dump(y, open("pickles/null_mapp_y_values_fold_{}.pk".format(fold),  "wb"))
+            if i == 1:
+                pickle.dump(x, open("pickles/null_DAPI_mapp_x_values_fold_{}.pk".format(fold), "wb"))
+                pickle.dump(y, open("pickles/null_DAPI_mapp_y_values_fold_{}.pk".format(fold), "wb"))
+            if i == 2:
+                print("dumping pickle")
+                pickle.dump(x, open("pickles/mapp_x_values_fold_{}.pk".format(fold), "wb"))
+                pickle.dump(y, open("pickles/mapp_y_values_fold_{}.pk".format(fold), "wb"))
+            i += 1
+            labels, x, y = labels[::-1], x[::-1], y[::-1]
+            auc = np.trapz(y,x)
+            print("AUC: ", auc)
+            plt.plot(x,y,linewidth=2.0)
+        plt.xlabel("FPR")
+        plt.ylabel("TPR")
+        plt.plot([0, .5, 1], [0,.5, 1], linewidth=1.0)
+        plt.xlim([0,1])
+        plt.ylim([0,1])
+        plt.title("Reciever Operating Characteristic AUC = " + str(auc))
+        plt.savefig('ROC_cross_validate_fold_{}_thresh='.format(fold) + str(lab_thresh) + "_sample_size" + str(sample_size) +"_" + loadName.replace("models/", "") + '.png')
 
 def getMSE():
     """
@@ -492,6 +449,49 @@ def plotInputs(inputs, labels, predicted, directory, rand=None):
         corr = np.corrcoef(lab.flatten(), pred.flatten())[0][1] #pearson correlation after transformations
         cv2.imwrite(directory + str(rand) + "cc_predicted" + "_pearson=" + str(corr)[0:5] + ".tif", pred)
 
+def getMetrics(predicted, labels, lab_thresh=None, pred_thresh=None):
+    """
+    PREDICTED and LABELS are the predicted and label image tensors
+    LAB_THRESH and PRED_THRESH are the pixel thresholds at which signal >= thresh is called positive, else negative
+    returns TPR, TNR, PPV, NPV, FNR, FPR for batch of images PREDICTED and LABELS
+    """
+    predicted = predicted.cpu().numpy()
+    labels = labels.cpu().numpy()
+
+    for i in range(0, len(labels)):
+        ##put images back in original space
+        lab = labels[i].reshape((img_dim,img_dim))
+        pred = predicted[i].reshape((img_dim,img_dim))
+        lab = (lab / 255) * 65535.0  
+        pred = (pred / 255) * 65535.0      
+        ##normalize image to have mean = 0, variance = 1
+        lmean, lstd = np.mean(lab), np.std(lab)
+        pmean, pstd = np.mean(pred), np.std(pred)
+        lab = ((lab - lmean) /float(lstd))
+        pred = ((pred - pmean) /float(pstd))
+        ##calculate relevant statistics
+        true_positive = np.sum(np.where((pred >= pred_thresh) & (lab >= lab_thresh), 1, 0))
+        true_negative = np.sum(np.where((pred < pred_thresh) & (lab < lab_thresh), 1, 0))
+        false_positive = np.sum(np.where((pred >= pred_thresh) & (lab < lab_thresh), 1, 0))
+        false_negative = np.sum(np.where((pred < pred_thresh) & (lab >= lab_thresh), 1, 0))
+        TPR = true_positive / float(true_positive + false_negative )
+        TNR = true_negative / float(true_negative + false_positive )
+        PPV = true_positive / float(true_positive + false_positive )
+        NPV = true_negative / float(true_negative + false_negative )
+        FNR = false_negative / float(false_negative + true_positive )
+        FPR = false_positive / float(false_positive + true_negative ) 
+        if math.isnan(TPR) or math.isnan(TNR) or math.isnan(PPV) or math.isnan(NPV) or math.isnan(FNR) or math.isnan(FPR):
+            TPR = 0 if math.isnan(TPR) else TPR
+            TNR = 0 if math.isnan(TNR) else TNR
+            PPV = 0 if math.isnan(PPV) else PPV
+            NPV = 0 if math.isnan(NPV) else NPV
+            FNR = 0 if math.isnan(FNR) else FNR
+            FPR = 0 if math.isnan(FPR) else FPR
+            return TPR, TNR, PPV, NPV, FNR, FPR
+        ##error catching - never occured
+        if math.isnan(TPR) or math.isnan(FPR):
+            print("TPR or FPR is nan with lab/pred thresh: ", lab_thresh, pred_thresh)
+    return TPR, TNR, PPV, NPV, FNR, FPR
 #============================================================================
 #============================================================================
 ## SUPPLEMENTAL CODE
@@ -648,7 +648,7 @@ learning_rate = .001
 continue_training = False ##if we want to train from a pre-trained model
 if continue_training:
     load_training_name = "LOAD_MODEL_NAME.pt" #model to use if we're training from a pre-trained model
-gpu_list = [0,3] ##gpu ids to use
+gpu_list = [0,1] ##gpu ids to use
 normalize = "scale" #scale for scaling values 0 to 255, or "unit" for subtracting mean and dividing by std 
 lossfn = "pearson"
 architecture = "unet mod"
