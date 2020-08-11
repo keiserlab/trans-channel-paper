@@ -16,7 +16,8 @@ osteosarcoma.py contains the code necessary to train and evaluate the model on t
 ExampleFigureGenerator.ipynb contains example code to reproduce the main performance results for the tau dataset
 
 models:
-fully trained models, including the model we trained and applied to the archival HCS, the 3 cross-validation models applied to an expanded dataset with negative controls (see Supplement), along with the 3 models trained with 3-fold cross-validation on the independent osteosarcoma dataset 
+fully trained models, including the model we trained and applied to the archival HCS ("raw_1_thru_6_full_Unet_mod_continue_training_2.pt"), the 3 cross-validation models applied to an expanded dataset with negative controls (see Supplement), along with the 3 models trained with 3-fold cross-validation on the independent osteosarcoma dataset 
+
 
 
 

@@ -1,8 +1,8 @@
 """
-We include here all of the necessary code to reproduce the main training and model evaluation results from the tau dataset
-script can be run by the command "python transchannel.py {fold number}"
-(For the supplemental analysis) to specify a fold in the 3-fold cross validation , use 1,2, or 3
-Else specify any other integer to perform the 70% train, 30% test split presented in the main results of the paper
+We include here all of the necessary code to reproduce the main training and model evaluation results from the tau dataset.
+Script can be run by the command "python transchannel.py {fold number}".
+For the supplemental analysis and to specify a fold in the 3-fold cross validation , use 1,2, or 3.
+Else specify any other integer to perform the 70% train, 30% test split presented in the main results of the paper.
 
 This script is divided into three parts:
 1) class and method definitions
@@ -12,7 +12,6 @@ This script is divided into three parts:
 5) the method calls 
 Any questions should be directed to daniel.wong2@ucsf.edu. Thank you!
 """
-
 import torch 
 import torch.nn as nn
 import torchvision.transforms as transforms
@@ -36,7 +35,6 @@ import pickle
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-
 
 #============================================================================
 #============================================================================
@@ -649,7 +647,7 @@ max_epochs = 20
 learning_rate = .001
 continue_training = False ##if we want to train from a pre-trained model
 if continue_training:
-    load_training_name = "models/cross_validate_fold3cross_validating_Unet_mod.pt" #model to use if we're training from a pre-trained model
+    load_training_name = "models/cross_validate_fold{}cross_validating_Unet_mod.pt".format(fold) #model to use if we're training from a pre-trained model
 gpu_list = [0,3] ##gpu ids to use
 normalize = "scale" #scale for scaling values 0 to 255, or "unit" for subtracting mean and dividing by std 
 lossfn = "pearson"
@@ -709,7 +707,7 @@ test(100000)
 getMSE(100000) 
 getNull()
 getNullMSE(100000)
-getROC(lab_thresh=2.0, sample_size=1000000)
+getROC(lab_thresh=1.0, sample_size=1000000)
 ablationTest(10, ablate_DAPI_only=False)
 
 
