@@ -634,7 +634,7 @@ if fold in [1,2,3]:
 else:
     cross_val = False
 img_dim = 2048
-plotName = "cross_validating_fold_{}_Unet_mod_continue_training".format(fold) #name to save model 
+plotName = "MODEL_NAME".format(fold) #name used to save model 
 if cross_val:
     csv_name = "/srv/home/dwong/AIInCell/datasets/butte_server_raw_plates_1_thru_16.csv" ##if cross validating, use extended dataset with negative controls included
 else:
@@ -647,7 +647,7 @@ max_epochs = 20
 learning_rate = .001
 continue_training = False ##if we want to train from a pre-trained model
 if continue_training:
-    load_training_name = "models/cross_validate_fold{}cross_validating_Unet_mod.pt".format(fold) #model to use if we're training from a pre-trained model
+    load_training_name = "LOAD_MODEL_NAME.pt" #model to use if we're training from a pre-trained model
 gpu_list = [0,3] ##gpu ids to use
 normalize = "scale" #scale for scaling values 0 to 255, or "unit" for subtracting mean and dividing by std 
 lossfn = "pearson"

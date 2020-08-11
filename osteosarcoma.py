@@ -81,7 +81,7 @@ class AblationDataset(Dataset):
 
 class Unet_mod(nn.Module):
     """
-    motif: upsamp, follow by 2x2 conv, concatenate this with old layer, transpose conv this final 
+    Motif: upsamp, follow by 2x2 conv, concatenate this with old layer, transpose conv this final 
     """
     def __init__(self):
         super(Unet_mod, self).__init__()
@@ -135,7 +135,7 @@ class Unet_mod(nn.Module):
 
 def pearsonCorrLoss(outputs, targets):
     """
-    custom loss function, negative pearson correlation loss
+    Custom loss function, negative pearson correlation loss
     """
     vx = outputs - torch.mean(outputs)
     vy = targets - torch.mean(targets)
@@ -144,7 +144,7 @@ def pearsonCorrLoss(outputs, targets):
 
 def getPearson(predicted, labels):
     """
-    calculate the average pearson correlation between PREDICTED and LABELS
+    Calculate the average pearson correlation between PREDICTED and LABELS
     """
     labels = labels.cpu().numpy()
     predicted = predicted.cpu().numpy()
@@ -156,7 +156,7 @@ def getPearson(predicted, labels):
 
 def saveTraining(model, epoch, optimizer, loss, PATH):
     """
-    function to save MODEL, EPOCH, OPTIMIZER, and LOSS, as pytorch file to PATH
+    Function to save MODEL, EPOCH, OPTIMIZER, and LOSS, as pytorch file to PATH
     """
     torch.save({
             'epoch': epoch,
@@ -167,7 +167,7 @@ def saveTraining(model, epoch, optimizer, loss, PATH):
 
 def plotInputs(inputs, labels, predicted, directory, rand=None):
     """
-    method to plot the INPUTS, LABELS, and PREDICTED images in DIRECTORY, writes corresponding images with a random identifier
+    Method to plot the INPUTS, LABELS, and PREDICTED images in DIRECTORY, writes corresponding images with a random identifier
     """
     inputs = inputs.cpu().numpy()
     labels = labels.cpu().numpy()
@@ -192,7 +192,7 @@ def plotInputs(inputs, labels, predicted, directory, rand=None):
 
 def train():
     """
-    method to train the model, saves the model every two epochs
+    Method to train the model, saves the model every two epochs
     """
     start_time = time.time()
     total_step = len(training_generator)
@@ -234,7 +234,7 @@ def train():
 
 def test(sample_size):
     """
-    runs the model through the test size for SAMPLE_SIZE number of images, calculates average pearson 
+    Runs the model through the test size for SAMPLE_SIZE number of images, calculates average pearson 
     """
     loadName = "models/cross_validate_fold1cross_validating_sourav_set.pt"
     checkpoint = torch.load(loadName, map_location='cuda:0') #why is this last flag needed on butte server? 
@@ -262,7 +262,7 @@ def test(sample_size):
 
 def getNull():
     """
-    finds the null performance of the dataset, i.e. pearson(input, label)
+    Finds the null performance of the dataset, i.e. pearson(input, label)
     """
     j = 0
     performance = []
@@ -279,11 +279,11 @@ def getNull():
 
 def getMSE(sample_size):
     """
-    calculates the MSE of SAMPLE_SIZE number of images
+    Calculates the MSE of SAMPLE_SIZE number of images
     """
     def calculateMSE(predicted, actual):
         """
-        helper function to calculate the MSE between PREDICTED and ACTUAL, will normalize to 0 mean and unit variance
+        Helper function to calculate the MSE between PREDICTED and ACTUAL, will normalize to 0 mean and unit variance
         """
         predicted = predicted.cpu().numpy()
         actual = actual.cpu().numpy()
@@ -321,7 +321,7 @@ def getMSE(sample_size):
 
 def ablationTest(sample_size):
     """
-    method to run the model on the test set and print pearson performance over SAMPLE_SIZE number of images
+    Method to run the model on the test set and print pearson performance over SAMPLE_SIZE number of images
     """
     ablations = list(np.arange(0, .1, .02))
     ablations += list(np.arange(.1, .9, .1))
@@ -375,30 +375,26 @@ def ablationTest(sample_size):
 
 #=======================================================================================
 #=======================================================================================
-#GLOBAL DEFINITIONS AND METHOD CALLS
+#GLOBAL DEFINITIONS 
 #=======================================================================================
 #=======================================================================================
 
 hostname = socket.gethostname() 
-if "keiserlab.org" not in hostname:
-    prefix = "/data1/wongd/"
-else:
-    prefix = "/srv/nas/mk1/users/dwong/"
+prefix = "/srv/nas/mk1/users/dwong/"
 task = "transchannel"
 # task = "ablation" ##for ablation training 
 short = False #param for truncating training and testing process for quick training dev
 img_dim = 1104
 train_params = {'batch_size': 1, 'num_workers': 5}
 test_params = {'batch_size': 1, 'num_workers': 5}
-plotName = "ablation_testing_cyclin_only_fold3_last_thresh" #name of model to save
+plotName = "MODEL_NAME" #name of model to save
 csvName = "datasets/cyclin_dataset.csv"
 gpu_list = [1] 
 max_epochs = 5
 learning_rate = .001
 continue_training = False
 if continue_training:
-    load_training_name = "models/d0_to_d1_ablation_cyclin_only_dataset_fold3.pt"
-    print("load training: ", load_training_name)
+    load_training_name = "LOAD_MODEL_NAME.pt"
 lossfn = "pearson"
 architecture = "unet mod"
 fold = int(sys.argv[1])
@@ -406,26 +402,12 @@ if fold in [1,2,3]:
     cross_val = True
 else:
     cross_val = False
-
-##print paramaters 
-print("fold: ", fold)
-print("cross_val: ", cross_val)
-print("plotname: ", plotName)
-print("task: ", task)
-print("dataset: ", csvName)
-print("learning_rate: ", learning_rate, "epochs: ", max_epochs, "gpu list: ", gpu_list)
-print("train params: ", train_params)
-print("test params: ", test_params)
-print("lossfn: ", lossfn)
-print("architecture: ", architecture)
 device = torch.device("cuda:" + str(gpu_list[0]))
-
 ## Generators
 if task == "transchannel":
     dataset = ImageDataset(csvName)
 if task == "ablation":
     dataset = AblationDataset(csvName, .95)
-
 ## Random seed for data split 
 dataset_size = len(dataset)
 indices = list(range(dataset_size))
@@ -433,8 +415,8 @@ split = int(np.floor(.3 * dataset_size)) #30% test
 np.random.seed(42)
 np.random.shuffle(indices)
 if cross_val:
-    split1 = int(np.floor(.3333 * dataset_size)) #30% test 
-    split2 = int(np.floor(.6666667 * dataset_size))
+    split1 = int(np.floor(.3333 * dataset_size)) #1/3 test 
+    split2 = int(np.floor(.6666667 * dataset_size)) #2/3 train 
     if fold == 1:
         train_indices, test_indices = indices[0:split2], indices[split2:] #[train, train, test]
     if fold == 2:
@@ -450,7 +432,6 @@ else:
 
 training_generator = data.DataLoader(dataset, sampler=train_sampler, **train_params)
 validation_generator = data.DataLoader(dataset,sampler=test_sampler, **test_params)
-
 if architecture == "unet mod":
     model = Unet_mod()
 if len(gpu_list) > 1:
@@ -461,7 +442,6 @@ if lossfn == "MSE": #in case we want to use a different loss function than negat
 if lossfn == "MAE":
     criterion = nn.L1Loss()
 optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=.9)
-print("optimizer", optimizer)
 if continue_training:
     checkpoint = torch.load(load_training_name,  map_location='cuda:0')
     model.load_state_dict(checkpoint['model_state_dict'])
@@ -469,11 +449,14 @@ if continue_training:
     epoch = checkpoint['epoch']
     loss = checkpoint['loss']
     model.train()
-    print("loaded model")
 
 
+#=======================================================================================
+#=======================================================================================
+#METHOD CALLS 
+#=======================================================================================
+#=======================================================================================
 
-#Method calls
 train()
 test(1000000)
 getNull()
