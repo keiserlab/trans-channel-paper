@@ -705,7 +705,7 @@ optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=.9)
 ## METHOD CALLS
 #============================================================================
 #============================================================================
-# train()
+train()
 test(100000)
 getMSE() 
 getNull()

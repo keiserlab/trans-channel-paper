@@ -10,7 +10,6 @@ Any questions should be directed to daniel.wong2@ucsf.edu. Thank you!
 """
 import torch 
 import torch.nn as nn
-import torchvision.transforms as transforms
 from torch.utils.data import Dataset
 from torch.utils import data
 from torch.utils.data.sampler import SubsetRandomSampler
