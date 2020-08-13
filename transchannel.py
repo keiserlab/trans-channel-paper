@@ -15,7 +15,6 @@ Any questions should be directed to daniel.wong2@ucsf.edu. Thank you!
 """
 import torch 
 import torch.nn as nn
-import torchvision.transforms as transforms
 from torch.utils.data import Dataset
 from torch.utils import data
 from torch.utils.data.sampler import SubsetRandomSampler
@@ -46,8 +45,7 @@ class ImageDataset(Dataset):
     Dataset of tau images. CSV_FILE should be a csv of x,t pairs of full-path strings corresponding to image names.
     x is the YFP-tau image name, and t is the AT8-pTau image name. 
     """
-    def __init__(self, csv_file, transform=None):
-        self.transform = transform
+    def __init__(self, csv_file):
         self.data = pd.read_csv(csv_file).values
     
     def __len__(self):
@@ -502,8 +500,7 @@ class AblationDataset(Dataset):
     csv_file should be a csv of x,t pairs of full path strings, pointing to images
     x is the YFP-tau image name, and t is the AT8-pTau image name
     """
-    def __init__(self, csv_file, thresh_percent, transform=None):
-        self.transform = transform
+    def __init__(self, csv_file, thresh_percent):
         self.data = pd.read_csv(csv_file).values
         self.thresh_percent = thresh_percent
 
@@ -661,7 +658,7 @@ normalize = "scale" #scale for scaling values 0 to 255, or "unit" for subtractin
 lossfn = "pearson"
 architecture = "unet mod"
 device = torch.device("cuda:" + str(gpu_list[0]) if use_cuda else "cpu")
-dataset = ImageDataset(csv_name, transform=transforms.Compose([transforms.ToTensor()]))
+dataset = ImageDataset(csv_name)
 ## Random seed for data split 
 dataset_size = len(dataset)
 indices = list(range(dataset_size))
@@ -708,7 +705,7 @@ optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=.9)
 ## METHOD CALLS
 #============================================================================
 #============================================================================
-train()
+# train()
 test(100000)
 getMSE() 
 getNull()
