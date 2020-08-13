@@ -633,7 +633,7 @@ else:
     cross_val = False
 img_dim = 2048
 plotName = "MODEL_NAME".format(fold) #name used to save model 
-if "keiserlab" in hostname: ##if on keiser lab server 
+if "keiserlab" in hostname: ##if on keiser lab server, else butte lab server 
     if cross_val:
         csv_name = "/srv/home/dwong/AIInCell/datasets/butte_server_raw_plates_1_thru_16.csv"
     else:
