@@ -1,8 +1,8 @@
 """
 We include here all of the necessary code to reproduce the main training and model evaluation results from the tau dataset.
-Script can be run by the command "python transchannel.py {fold number}".
-For the supplemental analysis and to specify a fold in the 3-fold cross validation , use 1,2, or 3.
-Else specify any other integer to perform the 70% train, 30% test split presented in the main results of the paper.
+Script can be run by the command "python transchannel.py {fold number}". Cross-validation over an extended dataset was used for the Supplemental analysis.
+To perform the 70% train, 30% test split presented in the main results of the paper, give an integer argument that is not in [1,2,3]. 
+For the supplemental analysis, to specify the fold in the 3-fold cross-validation , use 1,2, or 3 as the argument value.
 
 This script is divided into three parts:
 1) class and method definitions
@@ -26,7 +26,6 @@ import numpy as np
 import time 
 import shutil
 import os
-from PIL import Image
 import socket
 import sklearn 
 import random
@@ -43,7 +42,7 @@ import matplotlib.pyplot as plt
 #============================================================================
 class ImageDataset(Dataset):
     """
-    Dataset of tau images. CSV_FILE should be a csv of x,t pairs of full-path strings, pointing to images.
+    Dataset of tau images. CSV_FILE should be a csv of x,t pairs of full-path strings corresponding to image names.
     x is the YFP-tau image name, and t is the AT8-pTau image name. 
     """
     def __init__(self, csv_file, transform=None):
@@ -55,6 +54,16 @@ class ImageDataset(Dataset):
     
     def __getitem__(self, idx):
         x, t = self.data[idx] 
+        if "keiserlab" not in hostname: #if on butte lab server 
+            x = x.replace("/fast/disk0/dwong/", "/data1/wongd/")
+            t = t.replace("/fast/disk0/dwong/", "/data1/wongd/")
+            x = x.replace("/srv/nas/mk3/users/dwong/", "/data1/wongd/") 
+            t = t.replace("/srv/nas/mk3/users/dwong/", "/data1/wongd/")
+        if "keiserlab" in hostname: 
+            x = x.replace("/data1/wongd/", "/srv/nas/mk3/users/dwong/")
+            t = t.replace("/data1/wongd/", "/srv/nas/mk3/users/dwong/")
+            x = x.replace("/fast/disk0/dwong/", "/srv/nas/mk3/users/dwong/")
+            t = t.replace("/fast/disk0/dwong/", "/srv/nas/mk3/users/dwong/")
         if normalize == "scale":
             x_img = cv2.imread(x, cv2.IMREAD_UNCHANGED) 
             x_img = x_img.astype(np.float32)
@@ -125,10 +134,9 @@ class Unet_mod(nn.Module):
         h20 = nn.functional.relu(self.conv13(torch.cat((h0,h19), dim=1))) 
         return h20
 
-
 def train():
     """
-    Method to train the model, saves the model every 5 epochs
+    Method to train and save a model as a .pt object, saves the model every 5 epochs
     """
     if continue_training: ##flag to use if we are continuing to train a previously trained model
         checkpoint = torch.load(load_training_name)
@@ -157,7 +165,7 @@ def train():
             loss.backward()
             optimizer.step()
         print("epoch: ", epoch + 1, "avg training loss over all batches: ", running_loss / float(i), ", time elapsed: ", time.time() - start_time)
-        ##check validation loss and save model every 5 epochs
+        ##save model and check validation loss every 5 epochs
         if epoch % 5 == 0:
             saveTraining(model, epoch, optimizer, running_loss / float(i), "models/" + plotName + ".pt") 
             running_val_loss = 0
@@ -177,9 +185,10 @@ def train():
 
 def test(sample_size):
     """
-    Method to run the model on the test set and print pearson performance
+    Method to run the model on the test set, print the pearson performance, and pickle the result to pickles/
     """
     start_time = time.time()
+    ##specifies which model to load
     if cross_val:
         loadName = "models/cross_validate_fold{}cross_validating_Unet_mod_continue_training.pt".format(fold)
     else:
@@ -218,7 +227,7 @@ def getROC(lab_thresh, sample_size):
     """
     LAB_THRESH is the pixel threshold that we use to binarize our label image 
     SAMPLE_SIZE specifies how many images we want to include in this analysis
-    Plots and saves ROC curves for YFP Null Model, DAPI Null Model, and the actual ML model, 
+    Saves ROC curves for YFP Null Model, DAPI Null Model, and the actual ML model, 
     Pickles the coordinates of the different curves, and saves to pickles/
     """
     if fold in [1,2,3]:
@@ -229,9 +238,9 @@ def getROC(lab_thresh, sample_size):
     model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     model.eval()
-    mapp = {}
-    null_mapp = {}
-    null_DAPI_mapp = {}
+    mapp = {} #will correspond to ML model results
+    null_mapp = {} #will correspond to Null YFP model results
+    null_DAPI_mapp = {} #will correspond to Null DAPI model results
     threshs = list(np.arange(0, .9, .1)) #threshs are the various thresholds that we will use to binarize our predicted label images
     threshs += list(np.arange(.90, 1.1, .01))
     threshs +=  list(np.arange(1.1, 2, .1)) 
@@ -249,8 +258,8 @@ def getROC(lab_thresh, sample_size):
             outputs = model(local_batch)
             for t in threshs:
                 TPR, TNR, PPV, NPV, FNR, FPR = getMetrics(outputs, local_labels, lab_thresh=lab_thresh, pred_thresh=t)
-                null_TPR, null_TNR, null_PPV, null_NPV, null_FNR, null_FPR = getMetrics(local_batch[:,0,:,:], local_labels, lab_thresh=lab_thresh, pred_thresh=t, isNull=True)
-                null_DAPI_TPR, null_DAPI_TNR, null_DAPI_PPV, null_DAPI_NPV, null_DAPI_FNR, null_DAPI_FPR = getMetrics(local_batch[:,1,:,:], local_labels, lab_thresh=lab_thresh, pred_thresh=t, isNull=True) #for NULL AUC
+                null_TPR, null_TNR, null_PPV, null_NPV, null_FNR, null_FPR = getMetrics(local_batch[:,0,:,:], local_labels, lab_thresh=lab_thresh, pred_thresh=t)
+                null_DAPI_TPR, null_DAPI_TNR, null_DAPI_PPV, null_DAPI_NPV, null_DAPI_FNR, null_DAPI_FPR = getMetrics(local_batch[:,1,:,:], local_labels, lab_thresh=lab_thresh, pred_thresh=t) #for NULL AUC
                 mapp[t].append((FPR, TPR))
                 null_mapp[t].append((null_FPR, null_TPR))
                 null_DAPI_mapp[t].append((null_DAPI_FPR, null_DAPI_TPR))
@@ -294,7 +303,7 @@ def getROC(lab_thresh, sample_size):
 
 def getMSE():
     """
-    calculates MSE of ML predictions 
+    calculates the MSE of ML predictions, pickles the results to pickles/
     """
     if cross_val:
         loadName = "models/cross_validate_fold{}cross_validating_Unet_mod_continue_training.pt".format(fold)
@@ -318,6 +327,7 @@ def getMSE():
 def getNull():
     """
     Calculates the null Pearson and MSE performance of the dataset (i.e. pearson(input, label)) comparing YFP to AT8, and comparing DAPI to AT8
+    Pickles the results to pickles/
     """
     j = 0
     YFP_pearson_performance = []
@@ -353,6 +363,7 @@ def getNull():
 def calculateMSE(predicted, actual):
     """
     Helper function that calculates the MSE between PREDICTED and ACTUAL, performing a local normalization to 0 mean and unit variance
+    returns the MSE
     """
 
     predicted = predicted.cpu().numpy()
@@ -369,6 +380,7 @@ def calculateMSE(predicted, actual):
 def pearsonCorrLoss(outputs, targets):
     """
     Customized loss function to compute the negative pearson correlation loss between OUTPUTS and TARGETS (image tensors)
+    Returns the loss
     """
     vx = outputs - torch.mean(outputs)
     vy = targets - torch.mean(targets)
@@ -388,7 +400,7 @@ def saveTraining(model, epoch, optimizer, loss, PATH):
 
 def getPearson(predicted, labels):
     """
-    returns the average Pearson correlation coefficient between PREDICTED and LABELS lists of images, both of which are of type CUDA
+    Returns the average Pearson correlation coefficient between PREDICTED and LABELS lists of images, both of which are of type CUDA
     """
     labels = labels.cpu().numpy()
     predicted = predicted.cpu().numpy()
@@ -401,7 +413,7 @@ def getPearson(predicted, labels):
 def getDAPI(filename):
     """
     Simple string manipulation helper method to replace "FITC" with "DAPI" and "Blue" with "UV" of input FILENAME,
-    returns the modified string
+    Returns the modified string
     """
     DAPI = filename.replace("FITC", "DAPI")
     DAPI = DAPI.replace("Blue", "UV")
@@ -426,11 +438,11 @@ def plotInputs(inputs, labels, predicted, directory, rand=None):
         if normalize == "scale":
             inp = (inp / 255) * inputMax
             inp = inp.astype(np.uint16)
-        cv2.imwrite(directory + str(rand) + "_aainput_yfp.tif", inp)
+        cv2.imwrite(directory + str(rand) + "input_yfp.tif", inp)
         dapi = inputs[i][1].reshape((img_dim, img_dim))
         dapi = (dapi / 255) * inputMax
         dapi = dapi.astype(np.uint16)
-        cv2.imwrite(directory + str(rand) + "_aainput_dapi.tif", dapi)
+        cv2.imwrite(directory + str(rand) + "input_dapi.tif", dapi)
         lab = labels[i].reshape((img_dim,img_dim))
         if normalize == "unit":
             lab = (lab * labelSTD) + labelMean
@@ -438,7 +450,7 @@ def plotInputs(inputs, labels, predicted, directory, rand=None):
         if normalize == "scale":
             lab = (lab / 255) * labelMax
             lab = lab.astype(np.uint16)
-        cv2.imwrite(directory + str(rand) + "_bbactual.tif", lab)
+        cv2.imwrite(directory + str(rand) + "label_AT8.tif", lab)
         pred = predicted[i].reshape((img_dim,img_dim))
         if normalize == "unit":
             pred = (pred * labelSTD) + labelMean
@@ -447,51 +459,37 @@ def plotInputs(inputs, labels, predicted, directory, rand=None):
             pred = (pred / 255) * labelMax 
             pred = pred.astype(np.uint16)
         corr = np.corrcoef(lab.flatten(), pred.flatten())[0][1] #pearson correlation after transformations
-        cv2.imwrite(directory + str(rand) + "cc_predicted" + "_pearson=" + str(corr)[0:5] + ".tif", pred)
+        cv2.imwrite(directory + str(rand) + "predicted_AT8_pearson=" + str(corr)[0:5] + ".tif", pred)
 
 def getMetrics(predicted, labels, lab_thresh=None, pred_thresh=None):
     """
-    PREDICTED and LABELS are the predicted and label image tensors
-    LAB_THRESH and PRED_THRESH are the pixel thresholds at which signal >= thresh is called positive, else negative
-    returns TPR, TNR, PPV, NPV, FNR, FPR for batch of images PREDICTED and LABELS
+    Given image tensors PREDICTED and LABELS, a LAB_THRESH threshold to binarize LABELS, and a PRED_THRESH threshold to binarize the predicted image
+    Returns TPR, TNR, PPV, NPV, FNR, FPR for batch of images
     """
     predicted = predicted.cpu().numpy()
     labels = labels.cpu().numpy()
-
-    for i in range(0, len(labels)):
-        ##put images back in original space
-        lab = labels[i].reshape((img_dim,img_dim))
-        pred = predicted[i].reshape((img_dim,img_dim))
-        lab = (lab / 255) * 65535.0  
-        pred = (pred / 255) * 65535.0      
-        ##normalize image to have mean = 0, variance = 1
-        lmean, lstd = np.mean(lab), np.std(lab)
-        pmean, pstd = np.mean(pred), np.std(pred)
-        lab = ((lab - lmean) /float(lstd))
-        pred = ((pred - pmean) /float(pstd))
-        ##calculate relevant statistics
-        true_positive = np.sum(np.where((pred >= pred_thresh) & (lab >= lab_thresh), 1, 0))
-        true_negative = np.sum(np.where((pred < pred_thresh) & (lab < lab_thresh), 1, 0))
-        false_positive = np.sum(np.where((pred >= pred_thresh) & (lab < lab_thresh), 1, 0))
-        false_negative = np.sum(np.where((pred < pred_thresh) & (lab >= lab_thresh), 1, 0))
-        TPR = true_positive / float(true_positive + false_negative )
-        TNR = true_negative / float(true_negative + false_positive )
-        PPV = true_positive / float(true_positive + false_positive )
-        NPV = true_negative / float(true_negative + false_negative )
-        FNR = false_negative / float(false_negative + true_positive )
-        FPR = false_positive / float(false_positive + true_negative ) 
-        if math.isnan(TPR) or math.isnan(TNR) or math.isnan(PPV) or math.isnan(NPV) or math.isnan(FNR) or math.isnan(FPR):
-            TPR = 0 if math.isnan(TPR) else TPR
-            TNR = 0 if math.isnan(TNR) else TNR
-            PPV = 0 if math.isnan(PPV) else PPV
-            NPV = 0 if math.isnan(NPV) else NPV
-            FNR = 0 if math.isnan(FNR) else FNR
-            FPR = 0 if math.isnan(FPR) else FPR
-            return TPR, TNR, PPV, NPV, FNR, FPR
-        ##error catching - never occured
-        if math.isnan(TPR) or math.isnan(FPR):
-            print("TPR or FPR is nan with lab/pred thresh: ", lab_thresh, pred_thresh)
+    ##put images back in original space (0 to 65535 pixel value)
+    lab = labels[0].reshape((img_dim,img_dim))
+    pred = predicted[0].reshape((img_dim,img_dim))
+    lab = (lab / 255) * 65535.0  
+    pred = (pred / 255) * 65535.0
+    ##normalize image to have mean = 0, variance = 1
+    lmean, lstd = np.mean(lab), np.std(lab)
+    pmean, pstd = np.mean(pred), np.std(pred)
+    lab = ((lab - lmean) /float(lstd))
+    pred = ((pred - pmean) /float(pstd))
+    true_positive = np.sum(np.where((pred >= pred_thresh) & (lab >= lab_thresh), 1, 0))
+    true_negative = np.sum(np.where((pred < pred_thresh) & (lab < lab_thresh), 1, 0))
+    false_positive = np.sum(np.where((pred >= pred_thresh) & (lab < lab_thresh), 1, 0))
+    false_negative = np.sum(np.where((pred < pred_thresh) & (lab >= lab_thresh), 1, 0))  
+    TPR = true_positive / float(true_positive + false_negative )
+    TNR = true_negative / float(true_negative + false_positive )
+    PPV = true_positive / float(true_positive + false_positive )
+    NPV = true_negative / float(true_negative + false_negative )
+    FNR = false_negative / float(false_negative + true_positive )
+    FPR = false_positive / float(false_positive + true_negative ) 
     return TPR, TNR, PPV, NPV, FNR, FPR
+
 #============================================================================
 #============================================================================
 ## SUPPLEMENTAL CODE
@@ -623,11 +621,12 @@ def ablationTest(sample_size, ablate_DAPI_only=False):
 #============================================================================
 #============================================================================
 
+hostname = socket.gethostname() 
 if torch.cuda.device_count() > 1:
   print("# available GPUs", torch.cuda.device_count(), "GPUs!")
 use_cuda = torch.cuda.is_available()
 
-##fold of the 3-fold cross validation to use (1,2, or 3), else will specify no cross validation and use a random 70% training, 30% test split
+##fold of the 3-fold cross-validation to use (1,2, or 3), else any other integer will specify no cross-validation and use a random 70% training, 30% test split
 fold = int(sys.argv[1]) 
 if fold in [1,2,3]:
     cross_val = True
@@ -635,14 +634,24 @@ else:
     cross_val = False
 img_dim = 2048
 plotName = "MODEL_NAME".format(fold) #name used to save model 
-if cross_val:
-    csv_name = "/srv/home/dwong/AIInCell/datasets/butte_server_raw_plates_1_thru_16.csv" ##if cross validating, use extended dataset with negative controls included
+if "keiserlab" in hostname:
+    if cross_val:
+        csv_name = "/srv/home/dwong/AIInCell/datasets/butte_server_raw_plates_1_thru_16.csv"
+    else:
+        csv_name = "/srv/home/dwong/AIInCell/datasets/raw_dataset_1_thru_6_full_images_gpu2.csv" #plates 1 through 6 on gpu2's fast drive, used to train model for historical validation 
+    meanSTDStats = "/srv/home/dwong/AIInCell/models/raw_dataset_1_thru_6_stats.npy"
+    minMaxStats = "/srv/home/dwong/AIInCell/models/raw_1_thru_6_min_max.npy" #stats for min max values 
+    train_params = {'batch_size': 1, 'num_workers': 6} #batch size 32 for tiles, 4 seems ok for full image
+    test_params = {'batch_size': 1, 'num_workers': 6} 
 else:
-    csv_name = "/srv/home/dwong/AIInCell/datasets/raw_dataset_1_thru_6_full_images_gpu2.csv" #else use training drug dataset plates 1 through 6
-meanSTDStats = "/srv/home/dwong/AIInCell/models/raw_dataset_1_thru_6_stats.npy" 
-minMaxStats = "/srv/home/dwong/AIInCell/models/raw_1_thru_6_min_max.npy" #stats for min max values 
-train_params = {'batch_size': 1, 'num_workers': 6}
-test_params = {'batch_size': 1, 'num_workers': 6} 
+    if cross_val:
+        csv_name = "butte_server_raw_plates_1_thru_16.csv"
+    else:
+        csv_name = "raw_dataset_1_thru_6_full_images_gpu2.csv"
+    meanSTDStats = "raw_dataset_1_thru_6_stats.npy"
+    minMaxStats = "raw_1_thru_6_min_max.npy" #stats for min max values 
+    train_params = {'batch_size': 1, 'num_workers': 2} #batch size 32 for tiles, 4 seems ok for full image
+    test_params = {'batch_size': 1, 'num_workers': 2} 
 max_epochs = 20
 learning_rate = .001
 continue_training = False ##if we want to train from a pre-trained model
@@ -653,9 +662,7 @@ normalize = "scale" #scale for scaling values 0 to 255, or "unit" for subtractin
 lossfn = "pearson"
 architecture = "unet mod"
 device = torch.device("cuda:" + str(gpu_list[0]) if use_cuda else "cpu")
-dataset_type = "images"
-if dataset_type == "images":
-    dataset = ImageDataset(csv_name, transform=transforms.Compose([transforms.ToTensor()]))
+dataset = ImageDataset(csv_name, transform=transforms.Compose([transforms.ToTensor()]))
 ## Random seed for data split 
 dataset_size = len(dataset)
 indices = list(range(dataset_size))
@@ -704,9 +711,8 @@ optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=.9)
 #============================================================================
 train()
 test(100000)
-getMSE(100000) 
+getMSE() 
 getNull()
-getNullMSE(100000)
 getROC(lab_thresh=1.0, sample_size=1000000)
 ablationTest(10, ablate_DAPI_only=False)
 
