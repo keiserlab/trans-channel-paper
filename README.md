@@ -1,7 +1,7 @@
 # trans-channel-paper
 author: Daniel Wong (daniel.wong2@ucsf.edu)
 
-##Open access image data
+## Open access image data
 (put link here when finished)
 
 ## The following python packages are required: 
@@ -10,7 +10,7 @@ torch, torchvision, pandas, cv2, numpy, sklearn, pickle, matplotlib
 ## Hardware Requirements:
 All deep learning models were trained using Nvidia Geforce GTX 1080 GPUs
 
-##Content:
+## Content:
 
 **transchannel.py** contains the majority of the necessary code to reproduce the main results of the tau portion of the paper. This script can be run with a command such as "python transchannel.py {FOLD NUMBER}". See the documentation within this script for specifics. Be sure to set any parameters as specified in the section of transchannel.py titled "SETTING GLOBAL VARIABLES" prior to running the script. 
 
