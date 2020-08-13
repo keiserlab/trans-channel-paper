@@ -1,15 +1,15 @@
 """
 We include here all of the necessary code to reproduce the main training and model evaluation results from the tau dataset.
-Script can be run by the command "python transchannel.py {fold number}". Cross-validation over an extended dataset was used for the Supplemental analysis.
-To perform the 70% train, 30% test split presented in the main results of the paper, give an integer argument that is not in [1,2,3]. 
-For the supplemental analysis, to specify the fold in the 3-fold cross-validation , use 1,2, or 3 as the argument value.
+This script can be run with the command "python transchannel.py {FOLD NUMBER}". 
+We used a 3-fold cross-validation scheme over an extended dataset for the supplemental analysis (specify this by setting FOLD NUMBER to either 1,2, or 3).
+For the main paper analysis, we performed a 70% train, 30% test split presented. To specify this setup, give an integer argument that is not in [1,2,3] for FOLD NUMBER. 
 
 This script is divided into five parts:
 1) class and method definitions
 2) helper functions
-3) supplemental code
+3) supplemental code for ablation analysis
 4) setting global variables 
-5) the method calls 
+5) method calls to run specific parts of the code
 
 Any questions should be directed to daniel.wong2@ucsf.edu. Thank you!
 """
@@ -633,7 +633,7 @@ else:
     cross_val = False
 img_dim = 2048
 plotName = "MODEL_NAME".format(fold) #name used to save model 
-if "keiserlab" in hostname:
+if "keiserlab" in hostname: ##if on keiser lab server 
     if cross_val:
         csv_name = "/srv/home/dwong/AIInCell/datasets/butte_server_raw_plates_1_thru_16.csv"
     else:
