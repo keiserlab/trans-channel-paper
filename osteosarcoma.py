@@ -1,5 +1,12 @@
 """
-script to train and evaluate models on the independent osteosarcoma dataset
+Script to train and evaluate models on the independent dataset of the genome-wide functional screen in osteosarcoma cells 
+
+This script is divided into three parts:
+1) class and method definitions
+2) global definitions 
+3) method calls
+
+Any questions should be directed to daniel.wong2@ucsf.edu. Thank you!
 """
 import torch 
 import torch.nn as nn
@@ -25,10 +32,9 @@ import matplotlib.pyplot as plt
 
 #=======================================================================================
 #=======================================================================================
-#METHOD DEFINITIONS
+#CLASS AND METHOD DEFINITIONS
 #=======================================================================================
 #=======================================================================================
-
 
 class ImageDataset(Dataset):
     """
@@ -44,6 +50,14 @@ class ImageDataset(Dataset):
     
     def __getitem__(self, idx):
         d2, d1, d0 = self.data[idx]
+        if "keiserlab" not in hostname: #if on butte lab server 
+            d2 = d2.replace("/srv/nas/mk1/users/dwong/", "/data1/wongd/") 
+            d1 = d1.replace("/srv/nas/mk1/users/dwong/", "/data1/wongd/")
+            d0 = d0.replace("/srv/nas/mk1/users/dwong/", "/data1/wongd/")
+        else: #if on keiser server
+            d2 = d2.replace("/data1/wongd/", "/srv/nas/mk1/users/dwong/") 
+            d1 = d1.replace("/data1/wongd/", "/srv/nas/mk1/users/dwong/")
+            d0 = d0.replace("/data1/wongd/", "/srv/nas/mk1/users/dwong/")
         d0_img = cv2.imread(d0, cv2.IMREAD_UNCHANGED)
         d0_img = d0_img.astype(np.float32) 
         d0_img = (d0_img / 65535.0) * 255
@@ -63,6 +77,14 @@ class AblationDataset(Dataset):
         return len(self.data)
     def __getitem__(self, idx):
         d2, d1, d0 = self.data[idx]
+        if "keiserlab" not in hostname: #if on butte lab server 
+            d2 = d2.replace("/srv/nas/mk1/users/dwong/", "/data1/wongd/") 
+            d1 = d1.replace("/srv/nas/mk1/users/dwong/", "/data1/wongd/")
+            d0 = d0.replace("/srv/nas/mk1/users/dwong/", "/data1/wongd/")
+        else: #if on keiser server
+            d2 = d2.replace("/data1/wongd/", "/srv/nas/mk1/users/dwong/") 
+            d1 = d1.replace("/data1/wongd/", "/srv/nas/mk1/users/dwong/")
+            d0 = d0.replace("/data1/wongd/", "/srv/nas/mk1/users/dwong/")
         d0_img = cv2.imread(d0, cv2.IMREAD_UNCHANGED)
         d0_img = d0_img.astype(np.float32) #breaks here 
         d0_img = (d0_img / 65535.0) * 255
@@ -135,7 +157,7 @@ class Unet_mod(nn.Module):
 
 def pearsonCorrLoss(outputs, targets):
     """
-    Custom loss function, negative pearson correlation loss
+    Calculates and returns the negative pearson correlation loss
     """
     vx = outputs - torch.mean(outputs)
     vy = targets - torch.mean(targets)
@@ -144,7 +166,7 @@ def pearsonCorrLoss(outputs, targets):
 
 def getPearson(predicted, labels):
     """
-    Calculate the average pearson correlation between PREDICTED and LABELS
+    Calculates and returns the average pearson correlation between tensors PREDICTED and LABELS (potentially containing multiple images)
     """
     labels = labels.cpu().numpy()
     predicted = predicted.cpu().numpy()
@@ -234,7 +256,7 @@ def train():
 
 def test(sample_size):
     """
-    Runs the model through the test size for SAMPLE_SIZE number of images, calculates average pearson 
+    Runs the model through the test size for SAMPLE_SIZE number of images, calculates and prints the average pearson 
     """
     loadName = "models/cross_validate_fold1cross_validating_sourav_set.pt"
     checkpoint = torch.load(loadName, map_location='cuda:0') #why is this last flag needed on butte server? 
@@ -262,7 +284,7 @@ def test(sample_size):
 
 def getNull():
     """
-    Finds the null performance of the dataset, i.e. pearson(input, label)
+    Prints the null performance of the dataset, i.e. pearson(input, label)
     """
     j = 0
     performance = []
@@ -277,25 +299,27 @@ def getNull():
             performance.append(pearson)
     print("global null performance: ", np.mean(performance), np.std(performance))
 
+def calculateMSE(predicted, actual):
+    """
+    Helper function to calculate the MSE between PREDICTED and ACTUAL, will normalize to 0 mean and unit variance
+    Returns the MSE
+    """
+    predicted = predicted.cpu().numpy()
+    actual = actual.cpu().numpy()
+    predicted = predicted.reshape((img_dim, img_dim))
+    actual = actual.reshape((img_dim, img_dim))
+    ##normalize image to have mean = 0, variance = 1 locally
+    lmean, lstd = np.mean(actual), np.std(actual)
+    pmean, pstd = np.mean(predicted), np.std(predicted)
+    actual = ((actual - lmean) /float(lstd)) 
+    predicted = ((predicted - pmean) /float(pstd)) 
+    mse = np.average(np.square(predicted - actual))
+    return mse
+
 def getMSE(sample_size):
     """
-    Calculates the MSE of SAMPLE_SIZE number of images
+    Prints the MSE with SAMPLE_SIZE number of images selected
     """
-    def calculateMSE(predicted, actual):
-        """
-        Helper function to calculate the MSE between PREDICTED and ACTUAL, will normalize to 0 mean and unit variance
-        """
-        predicted = predicted.cpu().numpy()
-        actual = actual.cpu().numpy()
-        predicted = predicted.reshape((img_dim, img_dim))
-        actual = actual.reshape((img_dim, img_dim))
-        ##normalize image to have mean = 0, variance = 1 locally
-        lmean, lstd = np.mean(actual), np.std(actual)
-        pmean, pstd = np.mean(predicted), np.std(predicted)
-        actual = ((actual - lmean) /float(lstd)) 
-        predicted = ((predicted - pmean) /float(pstd)) 
-        mse = np.average(np.square(predicted - actual))
-        return mse
     loadName = "models/d0_to_d1_cyclin_only_dataset_fold3.pt"
     checkpoint = torch.load(loadName)
     model.load_state_dict(checkpoint['model_state_dict'])
@@ -380,9 +404,12 @@ def ablationTest(sample_size):
 #=======================================================================================
 
 hostname = socket.gethostname() 
-prefix = "/srv/nas/mk1/users/dwong/"
-task = "transchannel"
-# task = "ablation" ##for ablation training 
+if "keiserlab.org" not in hostname:
+    prefix = "/data1/wongd/"
+else:
+    prefix = "/srv/nas/mk1/users/dwong/"
+task = "transchannel" #for training the learner on unablated images
+# task = "ablation" ##for training the learner on ablated images at the 95th percentile intensity
 short = False #param for truncating training and testing process for quick training dev
 img_dim = 1104
 train_params = {'batch_size': 1, 'num_workers': 5}
@@ -397,7 +424,7 @@ if continue_training:
     load_training_name = "LOAD_MODEL_NAME.pt"
 lossfn = "pearson"
 architecture = "unet mod"
-fold = int(sys.argv[1])
+fold = int(sys.argv[1]) #specify cross validation fold to use in [1,2,3], else any other integer will do a 70% train, 30% test split
 if fold in [1,2,3]:
     cross_val = True
 else:
@@ -429,7 +456,6 @@ else:
     train_indices, test_indices = indices[split:], indices[:split]
     train_sampler = SubsetRandomSampler(train_indices)
     test_sampler = SubsetRandomSampler(test_indices) 
-
 training_generator = data.DataLoader(dataset, sampler=train_sampler, **train_params)
 validation_generator = data.DataLoader(dataset,sampler=test_sampler, **test_params)
 if architecture == "unet mod":

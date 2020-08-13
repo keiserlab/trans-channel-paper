@@ -9,9 +9,9 @@ All deep learning models were trained using Nvidia Geforce GTX 1080 GPUs
 
 Content:
 
-transchannel.py contains the majority of the necessary code to reproduce the main results of the tau portion of the paper. This script can be run with a command such as "python transchannel.py {FOLD NUMBER}". See the documentation within this script for specifics. Be sure to set any parameters as specified in the section titled "SETTING GLOBAL VARIABLES" prior to running the script. 
+transchannel.py contains the majority of the necessary code to reproduce the main results of the tau portion of the paper. This script can be run with a command such as "python transchannel.py {FOLD NUMBER}". See the documentation within this script for specifics. Be sure to set any parameters as specified in the section of transchannel.py titled "SETTING GLOBAL VARIABLES" prior to running the script. 
 
-osteosarcoma.py contains the code necessary to train and evaluate the model on the independent osteosarcoma dataset
+osteosarcoma.py contains the code necessary to train and evaluate the model on the independent dataset of the genome-wide functional screen in osteosarcoma cells 
 
 ExampleFigureGenerator.ipynb contains example code to reproduce the main performance results for the tau dataset
 

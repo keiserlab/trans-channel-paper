@@ -4,12 +4,13 @@ Script can be run by the command "python transchannel.py {fold number}". Cross-v
 To perform the 70% train, 30% test split presented in the main results of the paper, give an integer argument that is not in [1,2,3]. 
 For the supplemental analysis, to specify the fold in the 3-fold cross-validation , use 1,2, or 3 as the argument value.
 
-This script is divided into three parts:
+This script is divided into five parts:
 1) class and method definitions
 2) helper functions
 3) supplemental code
 4) setting global variables 
 5) the method calls 
+
 Any questions should be directed to daniel.wong2@ucsf.edu. Thank you!
 """
 import torch 
@@ -365,7 +366,6 @@ def calculateMSE(predicted, actual):
     Helper function that calculates the MSE between PREDICTED and ACTUAL, performing a local normalization to 0 mean and unit variance
     returns the MSE
     """
-
     predicted = predicted.cpu().numpy()
     actual = actual.cpu().numpy()
     predicted = predicted.reshape((img_dim, img_dim))
@@ -379,8 +379,7 @@ def calculateMSE(predicted, actual):
 
 def pearsonCorrLoss(outputs, targets):
     """
-    Customized loss function to compute the negative pearson correlation loss between OUTPUTS and TARGETS (image tensors)
-    Returns the loss
+    Calculates and returns the negative pearson correlation loss
     """
     vx = outputs - torch.mean(outputs)
     vy = targets - torch.mean(targets)
@@ -400,7 +399,7 @@ def saveTraining(model, epoch, optimizer, loss, PATH):
 
 def getPearson(predicted, labels):
     """
-    Returns the average Pearson correlation coefficient between PREDICTED and LABELS lists of images, both of which are of type CUDA
+    Calculates and returns the average pearson correlation between tensors PREDICTED and LABELS (potentially containing multiple images)
     """
     labels = labels.cpu().numpy()
     predicted = predicted.cpu().numpy()
