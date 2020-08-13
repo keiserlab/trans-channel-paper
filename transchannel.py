@@ -8,7 +8,7 @@ This script is divided into five parts:
 1) class and method definitions
 2) helper functions
 3) supplemental code for ablation analysis
-4) setting global variables 
+4) global variables 
 5) method calls to run specific parts of the code
 
 Any questions should be directed to daniel.wong2@ucsf.edu. Thank you!
@@ -358,7 +358,7 @@ def getNull():
 
 #============================================================================
 #============================================================================
-##HELPER FUNCTIONS
+## HELPER FUNCTIONS
 #============================================================================
 #============================================================================
 def calculateMSE(predicted, actual):
@@ -616,7 +616,7 @@ def ablationTest(sample_size, ablate_DAPI_only=False):
 
 #============================================================================
 #============================================================================
-##SETTING GLOBAL VARIABLES
+## GLOBAL VARIABLES
 #============================================================================
 #============================================================================
 
@@ -705,7 +705,7 @@ optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=.9)
 
 #============================================================================
 #============================================================================
-##METHOD CALLS
+## METHOD CALLS
 #============================================================================
 #============================================================================
 train()

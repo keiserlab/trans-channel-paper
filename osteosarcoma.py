@@ -3,7 +3,7 @@ Script to train and evaluate models on the independent dataset of the genome-wid
 
 This script is divided into three parts:
 1) class and method definitions
-2) global definitions 
+2) global variables
 3) method calls to run specific parts of the code
 
 Any questions should be directed to daniel.wong2@ucsf.edu. Thank you!
@@ -399,7 +399,7 @@ def ablationTest(sample_size):
 
 #=======================================================================================
 #=======================================================================================
-#GLOBAL DEFINITIONS 
+#GLOBAL VARIABLES
 #=======================================================================================
 #=======================================================================================
 
