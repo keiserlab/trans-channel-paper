@@ -1,16 +1,9 @@
 """
-We include here all of the necessary code to reproduce the main training and model evaluation results from the tau dataset.
-This script can be run with the command "python transchannel.py {FOLD NUMBER}". 
-We used a 3-fold cross-validation scheme over an extended dataset for the supplemental analysis (specify this by setting FOLD NUMBER to either 1,2, or 3).
-For the main paper analysis, we performed a 70% train, 30% test split presented. To specify this setup, give an integer argument that is not in [1,2,3] for FOLD NUMBER. 
-
+We include here all of the necessary code to reproduce the main training and model evaluation results from the tau dataset
 This script is divided into five parts:
 1) class and method definitions
 2) helper functions
 3) supplemental code for ablation analysis
-4) global variables 
-5) method calls to run specific parts of the code
-
 Any questions should be directed to daniel.wong2@ucsf.edu. Thank you!
 """
 import torch 
@@ -34,6 +27,7 @@ import pickle
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+hostname = socket.gethostname() 
 
 #============================================================================
 #============================================================================
@@ -45,8 +39,15 @@ class ImageDataset(Dataset):
     Dataset of tau images. CSV_FILE should be a csv of x,t pairs of full-path strings corresponding to image names.
     x is the YFP-tau image name, and t is the AT8-pTau image name. 
     """
-    def __init__(self, csv_file):
+    def __init__(self, csv_file, inputMin, inputMax, DAPIMin, DAPIMax, labelMin, labelMax,img_dim):
         self.data = pd.read_csv(csv_file).values
+        self.inputMin = inputMin
+        self.inputMax = inputMax
+        self.DAPIMin = DAPIMin
+        self.DAPIMax = DAPIMax
+        self.labelMin = labelMin
+        self.labelMax = labelMax
+        self.img_dim = img_dim
     
     def __len__(self):
         return len(self.data)
@@ -63,26 +64,25 @@ class ImageDataset(Dataset):
             t = t.replace("/data1/wongd/", "/srv/nas/mk3/users/dwong/")
             x = x.replace("/fast/disk0/dwong/", "/srv/nas/mk3/users/dwong/")
             t = t.replace("/fast/disk0/dwong/", "/srv/nas/mk3/users/dwong/")
-        if normalize == "scale":
-            x_img = cv2.imread(x, cv2.IMREAD_UNCHANGED) 
-            x_img = x_img.astype(np.float32)
-            x_img = ((x_img - inputMin) / (inputMax - inputMin)) * 255
-            DAPI_img = cv2.imread(getDAPI(x), cv2.IMREAD_UNCHANGED)
-            DAPI_img = DAPI_img.astype(np.float32)
-            DAPI_img = ((DAPI_img - DAPIMin) / (DAPIMax - DAPIMin)) * 255
-            t_img = cv2.imread(t, cv2.IMREAD_UNCHANGED)
-            t_img = t_img.astype(np.float32)
-            t_img = ((t_img - labelMin) / (labelMax - labelMin)) * 255
-            dest = np.zeros((2,img_dim,img_dim), dtype=np.float32)
-            dest[0,:] = x_img
-            dest[1,:] = DAPI_img
-            return dest, t_img
+        x_img = cv2.imread(x, cv2.IMREAD_UNCHANGED) 
+        x_img = x_img.astype(np.float32)
+        x_img = ((x_img - self.inputMin) / (self.inputMax - self.inputMin)) * 255
+        DAPI_img = cv2.imread(getDAPI(x), cv2.IMREAD_UNCHANGED)
+        DAPI_img = DAPI_img.astype(np.float32)
+        DAPI_img = ((DAPI_img - self.DAPIMin) / (self.DAPIMax - self.DAPIMin)) * 255
+        t_img = cv2.imread(t, cv2.IMREAD_UNCHANGED)
+        t_img = t_img.astype(np.float32)
+        t_img = ((t_img - self.labelMin) / (self.labelMax - self.labelMin)) * 255
+        dest = np.zeros((2,self.img_dim,self.img_dim), dtype=np.float32)
+        dest[0,:] = x_img
+        dest[1,:] = DAPI_img
+        return dest, t_img
 
 class Unet_mod(nn.Module):
     """
     The deep learning architecture inspired by Unet (Ronneberger et al. 2015), Motif: upsample, follow by 2x2 conv, concatenate with early layers (skip connections), transpose convolution 
     """
-    def __init__(self):
+    def __init__(self, img_dim):
         super(Unet_mod, self).__init__()
         self.conv1 = nn.Conv2d(2, 32, 3) 
         self.conv2 = nn.Conv2d(32, 64, 3)  
@@ -106,9 +106,10 @@ class Unet_mod(nn.Module):
         self.upsamp3 = nn.Upsample(size=(1022,1022), mode='bilinear', align_corners=True) #size = h1 - 1
         self.upsamp4 = nn.Upsample(size=(2047,2047), mode='bilinear', align_corners=True)
         self.transpose1 = nn.ConvTranspose2d(512,512,2)
+        self.img_dim=img_dim
         
     def forward(self, x):
-        h0 = x.view(x.shape[0], x.shape[1], img_dim, img_dim)
+        h0 = x.view(x.shape[0], x.shape[1], self.img_dim, self.img_dim)
         h0 = nn.functional.relu(self.conv1(h0))
         h1, p1indices = self.maxp1(h0) 
         h2 = nn.functional.relu(self.conv2(h1))
@@ -133,9 +134,17 @@ class Unet_mod(nn.Module):
         h20 = nn.functional.relu(self.conv13(torch.cat((h0,h19), dim=1))) 
         return h20
 
-def train():
+def train(continue_training=False, model=None, max_epochs=20, training_generator=None, validation_generator=None, lossfn=None, optimizer=None, plotName=None, device=None):
     """
     Method to train and save a model as a .pt object, saves the model every 5 epochs
+    CONTINUE_TRAINING indicates whether or not we should load a MODEL as a warm start for training
+    MAX_EPOCHS indicates the number of epochs we should use for training
+    TRAINING_GENERATOR and VALIDATION_GENERATOR are the training and validation generators to use
+    LOSSFN is our loss function to use
+    OPTIMIZER is the optimizer function to use 
+    PLOTNAME is the string that we will save our model name with 
+    DEVICE is the cuda device to allocate to  
+    Saves the trained model to directory "models/"
     """
     if continue_training: ##flag to use if we are continuing to train a previously trained model
         checkpoint = torch.load(load_training_name)
@@ -154,12 +163,8 @@ def train():
             i += 1
             local_batch, local_labels = local_batch.to(device), local_labels.to(device)
             outputs = model(local_batch)
-            if lossfn == "pearson":
-                loss = pearsonCorrLoss(outputs, local_labels)
-                running_loss += loss 
-            else: #other pytorch defined loss functions in case we wanted to use a different loss function (didn't use in study)
-                loss = criterion(outputs, local_labels)
-                running_loss += loss.item()
+            loss = lossfn(outputs, local_labels)
+            running_loss += loss 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -174,27 +179,25 @@ def train():
                     j += 1
                     local_batch, local_labels = local_batch.to(device), local_labels.to(device)
                     outputs = model(local_batch)
-                    if lossfn == "pearson":
-                        loss =  pearsonCorrLoss(outputs, local_labels)
-                    else:
-                        loss = criterion(outputs, local_labels)
+                    loss =  lossfn(outputs, local_labels)
                     running_val_loss += loss 
             print("epoch: ", epoch + 1, " global validation loss: ", running_val_loss / float(j))
     saveTraining(model, epoch, optimizer, running_loss / float(j), "models/" + plotName + ".pt")
 
-def test(sample_size):
+def test(sample_size=1000000, model=None, loadName=None, validation_generator=None, lossfn=None, device=None):
     """
-    Method to run the model on the test set, print the pearson performance, and pickle the result to pickles/
+    Method to run the model on the test set over SAMPLE_SIZE number of images
+    MODEL should be of type nn.Module, and specifies the architecture to use
+    LOADNAME is the name of the model to load 
+    CROSS_VAL indicates if we're testing under a cross-validation scheme
+    VALIDATION_GENERATOR is the generator that iterates over validation/test images
+    LOSSFN is the loss function to use
+    DEVICE is the cuda device to allocate to  
+    Print the pearson performance, and pickle the result to pickles/
     """
     start_time = time.time()
-    ##specifies which model to load
-    if cross_val:
-        loadName = "models/cross_validate_fold{}cross_validating_Unet_mod_continue_training.pt".format(fold)
-    else:
-        loadName = "models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt" #model used for historical image validation
     checkpoint = torch.load(loadName)
     model.load_state_dict(checkpoint['model_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     epoch = checkpoint['epoch']
     loss = checkpoint['loss']
     model.eval()
@@ -207,10 +210,7 @@ def test(sample_size):
             j += 1
             local_batch, local_labels = local_batch.to(device), local_labels.to(device)
             outputs = model(local_batch)
-            if lossfn == "pearson":
-                loss =  pearsonCorrLoss(outputs, local_labels)
-            else:
-                loss = criterion(outputs, local_labels)
+            loss = lossfn(outputs, local_labels)
             running_loss += loss 
             pearson = getPearson(outputs, local_labels)
             print(str(j) + "/" + str(total_step) + ", batch pearson: ", pearson)
@@ -222,20 +222,74 @@ def test(sample_size):
     print("global loss: ", running_loss / float(j))
     pickle.dump((np.mean(performance), np.std(performance)), open("pickles/ML_model_pearson_performance.pkl", "wb"))
 
-def getROC(lab_thresh, sample_size):
+def getMSE(loadName=None, model=None, validation_generator=None, device=None):
+    """
+    LOADNAME specifies the name of the model to load
+    MODEL should be of type nn.Module, and specifies the architecture to use 
+    VALIDATION_GENERATOR is the generator that iterates over validation/test images
+    calculates the MSE of ML predictions, pickles the results to pickles/
+    DEVICE is the cuda device to allocate to 
+    """
+    checkpoint = torch.load(loadName)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    model.eval()
+    performance = []
+    total_step = len(validation_generator)
+    with torch.set_grad_enabled(False):
+        for local_batch, local_labels in validation_generator:
+            local_batch, local_labels = local_batch.to(device), local_labels.to(device)
+            outputs = model(local_batch)
+            mse = calculateMSE(outputs, local_labels)
+            performance.append(mse)
+            print(mse)
+    print("global peformance (mse): ", np.mean(performance), np.std(performance))
+    pickle.dump((np.mean(performance), np.std(performance)), open("pickles/ML_model_MSE_performance.pkl", "wb"))
+
+def getNull(validation_generator=None, device=None):
+    """
+    VALIDATION_GENERATOR is the generator that iterates over validation/test images
+    DEVICE is the cuda device to allocate to
+    Calculates the null Pearson and MSE performance of the dataset (i.e. pearson(input, label)) comparing YFP to AT8, and comparing DAPI to AT8
+    Pickles the results to pickles/
+    """
+    j = 0
+    YFP_pearson_performance = []
+    YFP_MSE_performance = []
+    DAPI_pearson_performance = []
+    DAPI_MSE_performance = []
+    total_step = len(validation_generator)
+    with torch.set_grad_enabled(False):
+        for local_batch, local_labels in validation_generator:
+            j += 1
+            local_batch, local_labels = local_batch.to(device), local_labels.to(device)
+            YFP = local_batch[:, 0, :, :]
+            DAPI = local_batch[:, 1, :, :]
+            YFP_pearson_performance.append(getPearson(YFP, local_labels)) #NULL autoencode model 
+            DAPI_pearson_performance.append(getPearson(DAPI, local_labels))
+            YFP_MSE_performance.append(calculateMSE(YFP, local_labels))
+            DAPI_MSE_performance.append(calculateMSE(DAPI, local_labels))
+    print("global null YFP pearson performance: ", np.mean(YFP_pearson_performance), np.std(YFP_pearson_performance))
+    print("global null DAPI pearson performance: ", np.mean(DAPI_pearson_performance), np.std(DAPI_pearson_performance))
+    print("global null YFP MSE performance: ", np.mean(YFP_MSE_performance), np.std(YFP_MSE_performance))
+    print("global null DAPI MSE performance: ", np.mean(DAPI_MSE_performance), np.std(DAPI_MSE_performance))
+    pickle.dump((np.mean(YFP_pearson_performance), np.std(YFP_pearson_performance)), open("pickles/YFP_model_pearson_performance.pkl", "wb"))
+    pickle.dump((np.mean(YFP_MSE_performance), np.std(YFP_MSE_performance)), open("pickles/YFP_model_MSE_performance.pkl", "wb"))
+    pickle.dump((np.mean(DAPI_pearson_performance), np.std(DAPI_pearson_performance)), open("pickles/DAPI_model_pearson_performance.pkl", "wb"))
+    pickle.dump((np.mean(DAPI_MSE_performance), np.std(DAPI_MSE_performance)), open("pickles/DAPI_model_MSE_performance.pkl", "wb"))
+
+def getROC(lab_thresh, sample_size, model=None, loadName=None, validation_generator=None, device=None):
     """
     LAB_THRESH is the pixel threshold that we use to binarize our label image 
     SAMPLE_SIZE specifies how many images we want to include in this analysis
+    MODEL is the model of type NN.Module (a trained model specified by the name within this function will be loaded)
+    LOADNAME is the name of the model to load
+    VALIDATION_GENERATOR is the generator that iterates over validation/test images to evaluate
+    DEVICE is the cuda device to allocate to 
     Saves ROC curves for YFP Null Model, DAPI Null Model, and the actual ML model, 
     Pickles the coordinates of the different curves, and saves to pickles/
     """
-    if fold in [1,2,3]:
-        loadName = "models/cross_validate_fold{}cross_validating_Unet_mod_continue_training.pt".format(fold)
-    else:
-        loadName = "models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt" #model used for archival HCS image validation
     checkpoint = torch.load(loadName)
     model.load_state_dict(checkpoint['model_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     model.eval()
     mapp = {} #will correspond to ML model results
     null_mapp = {} #will correspond to Null YFP model results
@@ -265,7 +319,8 @@ def getROC(lab_thresh, sample_size):
             j += 1
             if j > sample_size:
                 break
-        ##generate both ROC curves, one for model, one for null 
+            print(j)
+        ##generate ROC curves data, one per model
         i = 0
         for m in [null_mapp, null_DAPI_mapp, mapp]:
             coordinates = [] #list of tuples (thresh, FPR, TPR) to plot
@@ -291,69 +346,7 @@ def getROC(lab_thresh, sample_size):
             labels, x, y = labels[::-1], x[::-1], y[::-1]
             auc = np.trapz(y,x)
             print("AUC: ", auc)
-            plt.plot(x,y,linewidth=2.0)
-        plt.xlabel("FPR")
-        plt.ylabel("TPR")
-        plt.plot([0, .5, 1], [0,.5, 1], linewidth=1.0)
-        plt.xlim([0,1])
-        plt.ylim([0,1])
-        plt.title("Reciever Operating Characteristic AUC = " + str(auc))
-        plt.savefig('ROC_cross_validate_fold_{}_thresh='.format(fold) + str(lab_thresh) + "_sample_size" + str(sample_size) +"_" + loadName.replace("models/", "") + '.png')
-
-def getMSE():
-    """
-    calculates the MSE of ML predictions, pickles the results to pickles/
-    """
-    if cross_val:
-        loadName = "models/cross_validate_fold{}cross_validating_Unet_mod_continue_training.pt".format(fold)
-    else:
-        loadName = "models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt" #model used for historical image validation
-    checkpoint = torch.load(loadName)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    model.eval()
-    performance = []
-    total_step = len(validation_generator)
-    with torch.set_grad_enabled(False):
-        for local_batch, local_labels in validation_generator:
-            local_batch, local_labels = local_batch.to(device), local_labels.to(device)
-            outputs = model(local_batch)
-            mse = calculateMSE(outputs, local_labels)
-            performance.append(mse)
-    print("global peformance (mse): ", np.mean(performance), np.std(performance))
-    pickle.dump((np.mean(performance), np.std(performance)), open("pickles/ML_model_MSE_performance.pkl", "wb"))
-
-def getNull():
-    """
-    Calculates the null Pearson and MSE performance of the dataset (i.e. pearson(input, label)) comparing YFP to AT8, and comparing DAPI to AT8
-    Pickles the results to pickles/
-    """
-    j = 0
-    YFP_pearson_performance = []
-    YFP_MSE_performance = []
-    DAPI_pearson_performance = []
-    DAPI_MSE_performance = []
-    total_step = len(validation_generator)
-    with torch.set_grad_enabled(False):
-        for local_batch, local_labels in validation_generator:
-            j += 1
-            local_batch, local_labels = local_batch.to(device), local_labels.to(device)
-            YFP = local_batch[:, 0, :, :]
-            DAPI = local_batch[:, 1, :, :]
-            YFP_pearson_performance.append(getPearson(YFP, local_labels)) #NULL autoencode model 
-            DAPI_pearson_performance.append(getPearson(DAPI, local_labels))
-            YFP_MSE_performance.append(calculateMSE(YFP, local_labels))
-            DAPI_MSE_performance.append(calculateMSE(DAPI, local_labels))
-    print("global null YFP pearson performance: ", np.mean(YFP_pearson_performance), np.std(YFP_pearson_performance))
-    print("global null DAPI pearson performance: ", np.mean(DAPI_pearson_performance), np.std(DAPI_pearson_performance))
-    print("global null YFP MSE performance: ", np.mean(YFP_MSE_performance), np.std(YFP_MSE_performance))
-    print("global null DAPI MSE performance: ", np.mean(DAPI_MSE_performance), np.std(DAPI_MSE_performance))
-    pickle.dump((np.mean(YFP_pearson_performance), np.std(YFP_pearson_performance)), open("pickles/YFP_model_pearson_performance.pkl", "wb"))
-    pickle.dump((np.mean(YFP_MSE_performance), np.std(YFP_MSE_performance)), open("pickles/YFP_model_MSE_performance.pkl", "wb"))
-    pickle.dump((np.mean(DAPI_pearson_performance), np.std(DAPI_pearson_performance)), open("pickles/DAPI_model_pearson_performance.pkl", "wb"))
-    pickle.dump((np.mean(DAPI_MSE_performance), np.std(DAPI_MSE_performance)), open("pickles/DAPI_model_MSE_performance.pkl", "wb"))
-
-
+       
 #============================================================================
 #============================================================================
 ## HELPER FUNCTIONS
@@ -366,6 +359,7 @@ def calculateMSE(predicted, actual):
     """
     predicted = predicted.cpu().numpy()
     actual = actual.cpu().numpy()
+    img_dim = actual.shape[-1]
     predicted = predicted.reshape((img_dim, img_dim))
     actual = actual.reshape((img_dim, img_dim))
     lmean, lstd = np.mean(actual), np.std(actual)
@@ -465,6 +459,7 @@ def getMetrics(predicted, labels, lab_thresh=None, pred_thresh=None):
     """
     predicted = predicted.cpu().numpy()
     labels = labels.cpu().numpy()
+    img_dim = labels.shape[-1]
     ##put images back in original space (0 to 65535 pixel value)
     lab = labels[0].reshape((img_dim,img_dim))
     pred = predicted[0].reshape((img_dim,img_dim))
@@ -536,11 +531,14 @@ class AblationDataset(Dataset):
         dest[1,:] = DAPI_img
         return dest, t_img
 
-def ablationTest(sample_size, ablate_DAPI_only=False):
+def ablationTest(sample_size=1000000, validation_generator=None, ablate_DAPI_only=False, model=None, loadName=None, device=None):
     """
-    Method to run the model on the test set and print pearson performance under ablation conditions
-    if ABLATE_DAPI_ONLY, then will only ablate the DAPI input and leave YFP-tau alone 
-    calculates over SAMPLE_SIZE number of images
+    SAMPLE_SIZE is the number of images to evaluate from the VALIDATION_GENERATOR
+    VALIDATION_GENERATOR is the generator that iterates over validation/test images to evaluate
+    If ABLATE_DAPI_ONLY, then will only ablate the DAPI input and leave YFP-tau alone 
+    LOADNAME is the name of the model to load and evaluate 
+    DEVICE is the cuda device to allocate to
+    Method to run the model on the test set and print pearson performance under a range of ablation conditions
     """
     ablations = list(np.arange(0, .1, .02))
     ablations += list(np.arange(.1, 1.1, .1))
@@ -548,13 +546,7 @@ def ablationTest(sample_size, ablate_DAPI_only=False):
     y = []
     stds = []
     start_time = time.time()
-    if fold in [1,2,3]:
-        loadName = "models/cross_validate_fold{}cross_validating_Unet_mod_continue_training.pt".format(fold)
-    else:
-        loadName = "models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt" #model used for historical image validation
     checkpoint = torch.load(loadName)
-    shutil.rmtree("outputs/")
-    os.mkdir("outputs/")
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
     for a in ablations:
@@ -565,6 +557,7 @@ def ablationTest(sample_size, ablate_DAPI_only=False):
             for local_batch, local_labels in validation_generator:
                 j += 1   
                 local_batch = local_batch.cpu().numpy()
+                img_dim = local_batch.shape[-1]
                 local_batch = local_batch.reshape((2,img_dim, img_dim))
                 YFP = local_batch[0]
                 DAPI = local_batch[1]
@@ -577,10 +570,6 @@ def ablationTest(sample_size, ablate_DAPI_only=False):
                 else:
                     YFP_threshold = sorted_local_YFP[thresh_index]
                     DAPI_threshold = sorted_local_DAPI[thresh_index]
-                ##plot originals before ablation
-                rand = np.random.randint(0,10000000000)
-                cv2.imwrite("outputs/" + str(rand) + "_aainput_yfp_og.tif", ((YFP / 255) * 65535).astype(np.uint16))
-                cv2.imwrite("outputs/" + str(rand) + "_aainput_dapi_og.tif", ((DAPI / 255) * 65535).astype(np.uint16))
                 ##ablate both DAPI and YFP tau
                 if ablate_DAPI_only == False: 
                     YFP[YFP < YFP_threshold] = 0
@@ -594,131 +583,13 @@ def ablationTest(sample_size, ablate_DAPI_only=False):
                 local_labels = local_labels.to(device)
                 outputs = model(local_batch)
                 pearson = getPearson(outputs, local_labels)            
-                plotInputs(local_batch, local_labels, outputs, directory="outputs/", rand=rand)
-                print(str(j) + "/" + str(total_step) + ", batch pearson: ", pearson)
+                # print(str(j) + "/" + str(total_step) + ", batch pearson: ", pearson)
                 if j == sample_size:
                     break
                 performance.append(pearson) 
         x.append(a)
         y.append(np.mean(performance))
         stds.append(np.std(performance))
-        print("global performance: ", np.mean(performance), np.std(performance))
-    plt.xlabel("% Ablated")
-    plt.ylabel("Pearson Accuracy")
-    plt.plot(x,y,linewidth=2.0)
-    plt.xlim([0,1])
-    plt.ylim([0,1])
-    plt.title("Ablation Testing")
-    plt.savefig('ablation_sample_size=' + str(sample_size) + 'model=' + loadName.replace("models/", "") + '.png')
-
-#============================================================================
-#============================================================================
-## GLOBAL VARIABLES
-#============================================================================
-#============================================================================
-
-hostname = socket.gethostname() 
-if torch.cuda.device_count() > 1:
-  print("# available GPUs", torch.cuda.device_count(), "GPUs!")
-use_cuda = torch.cuda.is_available()
-
-##fold of the 3-fold cross-validation to use (1,2, or 3), else any other integer will specify no cross-validation and use a random 70% training, 30% test split
-fold = int(sys.argv[1]) 
-if fold in [1,2,3]:
-    cross_val = True
-else:
-    cross_val = False
-img_dim = 2048
-plotName = "MODEL_NAME".format(fold) #name used to save model 
-if "keiserlab" in hostname: ##if on keiser lab server, else butte lab server 
-    if cross_val:
-        csv_name = "/srv/home/dwong/AIInCell/datasets/butte_server_raw_plates_1_thru_16.csv"
-    else:
-        csv_name = "/srv/home/dwong/AIInCell/datasets/raw_dataset_1_thru_6_full_images_gpu2.csv" #plates 1 through 6 on gpu2's fast drive, used to train model for historical validation 
-    meanSTDStats = "/srv/home/dwong/AIInCell/models/raw_dataset_1_thru_6_stats.npy"
-    minMaxStats = "/srv/home/dwong/AIInCell/models/raw_1_thru_6_min_max.npy" #stats for min max values 
-    train_params = {'batch_size': 1, 'num_workers': 6} #batch size 32 for tiles, 4 seems ok for full image
-    test_params = {'batch_size': 1, 'num_workers': 6} 
-else:
-    if cross_val:
-        csv_name = "butte_server_raw_plates_1_thru_16.csv"
-    else:
-        csv_name = "raw_dataset_1_thru_6_full_images_gpu2.csv"
-    meanSTDStats = "raw_dataset_1_thru_6_stats.npy"
-    minMaxStats = "raw_1_thru_6_min_max.npy" #stats for min max values 
-    train_params = {'batch_size': 1, 'num_workers': 2} #batch size 32 for tiles, 4 seems ok for full image
-    test_params = {'batch_size': 1, 'num_workers': 2} 
-max_epochs = 20
-learning_rate = .001
-continue_training = False ##if we want to train from a pre-trained model
-if continue_training:
-    load_training_name = "LOAD_MODEL_NAME.pt" #model to use if we're training from a pre-trained model
-gpu_list = [0,1] ##gpu ids to use
-normalize = "scale" #scale for scaling values 0 to 255, or "unit" for subtracting mean and dividing by std 
-lossfn = "pearson"
-architecture = "unet mod"
-device = torch.device("cuda:" + str(gpu_list[0]) if use_cuda else "cpu")
-dataset = ImageDataset(csv_name)
-## Random seed for data split 
-dataset_size = len(dataset)
-indices = list(range(dataset_size))
-split = int(np.floor(.3 * dataset_size)) #30% test 
-seed = 42
-np.random.seed(seed)
-np.random.shuffle(indices)
-if cross_val: 
-    split1 = int(np.floor(.3333 * dataset_size)) #1/3 test 
-    split2 = int(np.floor(.6666667 * dataset_size)) #2/3 train
-    if fold == 1:
-        train_indices, test_indices = indices[0:split2], indices[split2:] #[train, train, test]
-    if fold == 2:
-        train_indices, test_indices = indices[split1:], indices[0:split1] #[test, train, train]
-    if fold == 3:
-        train_indices, test_indices = indices[0:split1] + indices[split2:], indices[split1:split2] #[train, test, train]
-    train_sampler = SubsetRandomSampler(train_indices) 
-    test_sampler = SubsetRandomSampler(test_indices) #randomize indices 
-else: #if we're specifying a 70% train, 30% test split 
-    train_indices, test_indices = indices[split:], indices[:split]
-    train_sampler = SubsetRandomSampler(train_indices)
-    test_sampler = SubsetRandomSampler(test_indices) #radom indices 
-training_generator = data.DataLoader(dataset, sampler=train_sampler, **train_params)
-validation_generator = data.DataLoader(dataset,sampler=test_sampler, **test_params)
-##Initialize stats, model, loss function, and optimizer 
-stats = np.load(meanSTDStats)
-inputMean, inputSTD, labelMean, labelSTD, DAPIMean, DAPISTD = stats
-stats = np.load(minMaxStats)
-inputMin, inputMax, labelMin, labelMax, DAPIMin, DAPIMax = stats
-model = Unet_mod()
-if len(gpu_list) > 1:
-    model = nn.DataParallel(model, device_ids=gpu_list).cuda()
-model = model.to(device)
-#Other loss functions are included here in case we wanted to use ones other than a pearson loss (not performed in study however)
-if lossfn == "MSE":
-    criterion = nn.MSELoss()
-if lossfn == "L1Loss":
-    criterion = nn.L1Loss()
-optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=.9)
-
-
-#============================================================================
-#============================================================================
-## METHOD CALLS
-#============================================================================
-#============================================================================
-train()
-test(100000)
-getMSE() 
-getNull()
-getROC(lab_thresh=1.0, sample_size=1000000)
-ablationTest(10, ablate_DAPI_only=False)
-
-
-
-
-
-
-
-
-
-
+        print("ablation: {}, global performance: avg={}, std= {}".format(a, np.mean(performance), np.std(performance)))
+    
 

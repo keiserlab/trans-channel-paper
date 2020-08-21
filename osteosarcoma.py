@@ -352,7 +352,7 @@ def ablationTest(sample_size):
     x = []
     y = []
     start_time = time.time()
-    loadName = "models/cross_validate_fold1cross_validating_sourav_set.pt"
+    loadName = "models/cross_validate_fold{}cross_validating_sourav_set.pt".format(fold)
     checkpoint = torch.load(loadName, map_location='cuda:0')
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
