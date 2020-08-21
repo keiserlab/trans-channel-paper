@@ -50,7 +50,7 @@ learning_rate = .001
 continue_training = False ##if we want to train from a pre-trained model
 if continue_training:
     load_training_name = "LOAD_MODEL_NAME.pt" #model to use if we're training from a pre-trained model
-gpu_list = [6,7] ##gpu ids to use
+gpu_list = [0,1] ##gpu ids to use
 normalize = "scale" #scale for scaling values 0 to 255, or "unit" for subtracting mean and dividing by std 
 lossfn = pearsonCorrLoss 
 architecture = "unet mod"
@@ -60,7 +60,7 @@ stats = np.load(meanSTDStats)
 inputMean, inputSTD, labelMean, labelSTD, DAPIMean, DAPISTD = stats
 stats = np.load(minMaxStats)
 inputMin, inputMax, labelMin, labelMax, DAPIMin, DAPIMax = stats
-model = Unet_mod(img_dim=img_dim)
+model = Unet_mod()
 if len(gpu_list) > 1:
     model = nn.DataParallel(model, device_ids=gpu_list).cuda()
 model = model.to(device)
@@ -99,6 +99,7 @@ validation_generator = data.DataLoader(dataset,sampler=test_sampler, **test_para
 
 # train(continue_training=False, model=model, max_epochs=max_epochs, training_generator=training_generator, validation_generator=validation_generator, lossfn=lossfn, optimizer=optimizer, plotName="plotName",device=device)
 test(sample_size=1000000, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=validation_generator, lossfn=lossfn,device=device)
+# testOnSeparatePlates(sample_size=1000, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=validation_generator, lossfn=lossfn, device=device)
 getMSE(loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", model=model, validation_generator=validation_generator)
 getNull(validation_generator=validation_generator,device=device)
 getROC(lab_thresh=1.0, sample_size=1000000, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=validation_generator, device=device)

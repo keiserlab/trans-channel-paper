@@ -76,13 +76,13 @@ class ImageDataset(Dataset):
         dest = np.zeros((2,self.img_dim,self.img_dim), dtype=np.float32)
         dest[0,:] = x_img
         dest[1,:] = DAPI_img
-        return dest, t_img
+        return x, dest, t_img
 
 class Unet_mod(nn.Module):
     """
     The deep learning architecture inspired by Unet (Ronneberger et al. 2015), Motif: upsample, follow by 2x2 conv, concatenate with early layers (skip connections), transpose convolution 
     """
-    def __init__(self, img_dim):
+    def __init__(self):
         super(Unet_mod, self).__init__()
         self.conv1 = nn.Conv2d(2, 32, 3) 
         self.conv2 = nn.Conv2d(32, 64, 3)  
@@ -106,10 +106,9 @@ class Unet_mod(nn.Module):
         self.upsamp3 = nn.Upsample(size=(1022,1022), mode='bilinear', align_corners=True) #size = h1 - 1
         self.upsamp4 = nn.Upsample(size=(2047,2047), mode='bilinear', align_corners=True)
         self.transpose1 = nn.ConvTranspose2d(512,512,2)
-        self.img_dim=img_dim
         
     def forward(self, x):
-        h0 = x.view(x.shape[0], x.shape[1], self.img_dim, self.img_dim)
+        h0 = x.view(x.shape[0], x.shape[1], x.shape[-1], x.shape[-1])
         h0 = nn.functional.relu(self.conv1(h0))
         h1, p1indices = self.maxp1(h0) 
         h2 = nn.functional.relu(self.conv2(h1))
@@ -159,7 +158,7 @@ def train(continue_training=False, model=None, max_epochs=20, training_generator
         model.train()
         i = 0 
         running_loss = 0
-        for local_batch, local_labels in training_generator:
+        for names, local_batch, local_labels in training_generator:
             i += 1
             local_batch, local_labels = local_batch.to(device), local_labels.to(device)
             outputs = model(local_batch)
@@ -175,7 +174,7 @@ def train(continue_training=False, model=None, max_epochs=20, training_generator
             running_val_loss = 0
             j = 0
             with torch.set_grad_enabled(False):
-                for local_batch, local_labels in validation_generator:
+                for names, local_batch, local_labels in validation_generator:
                     j += 1
                     local_batch, local_labels = local_batch.to(device), local_labels.to(device)
                     outputs = model(local_batch)
@@ -206,7 +205,7 @@ def test(sample_size=1000000, model=None, loadName=None, validation_generator=No
     j = 0
     running_loss = 0
     with torch.set_grad_enabled(False):
-        for local_batch, local_labels in validation_generator:
+        for names, local_batch, local_labels in validation_generator:
             j += 1
             local_batch, local_labels = local_batch.to(device), local_labels.to(device)
             outputs = model(local_batch)
@@ -222,6 +221,59 @@ def test(sample_size=1000000, model=None, loadName=None, validation_generator=No
     print("global loss: ", running_loss / float(j))
     pickle.dump((np.mean(performance), np.std(performance)), open("pickles/ML_model_pearson_performance.pkl", "wb"))
 
+def testOnSeparatePlates(sample_size, model=None, loadName=None, validation_generator=None, lossfn=None, device=None):
+    """
+    runs model evaluation and calculates pearson by plate, given SAMPLE_SIZE number of images 
+    """
+    plate_pearsons = {i: [] for i in range(1,7)} #key plate number, value: list of pearson correlations
+    null_YFP_pearsons = {i: [] for i in range(1,7)}
+    null_DAPI_pearsons = {i: [] for i in range(1,7)}
+    checkpoint = torch.load(loadName)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    epoch = checkpoint['epoch']
+    loss = checkpoint['loss']
+    model.eval()
+    performance = []
+    total_step = len(validation_generator)
+    j = 0
+    running_loss = 0
+    with torch.set_grad_enabled(False):
+        for names, local_batch, local_labels in validation_generator:
+            plateNumber = int(names[0][names[0].find("plate") + 5 :names[0].find("plate") + 6]) ##given plate number <= 9!
+            j += 1
+            local_batch, local_labels = local_batch.to(device), local_labels.to(device)
+            outputs = model(local_batch)       
+            loss =  lossfn(outputs, local_labels)
+            running_loss += loss 
+            pearson = getPearson(outputs, local_labels)
+            performance.append(pearson) 
+            print(pearson, plateNumber)
+            plate_pearsons[plateNumber].append(pearson)
+            null_YFP_pearson = getPearson(local_batch[:,0,:,:], local_labels)
+            null_YFP_pearsons[plateNumber].append(null_YFP_pearson)
+            null_DAPI_pearson = getPearson(local_batch[:,1,:,:], local_labels)
+            null_DAPI_pearsons[plateNumber].append(null_DAPI_pearson)
+            if j > sample_size:
+                break
+    ##pickle and print results
+    model_performances, null_YFP_performances, null_DAPI_performances = [], [], []
+    model_stds, null_YFP_stds, null_DAPI_stds = [], [], []
+    for i in plate_pearsons:
+        print("plate {} average pearson test performance: {}, std: {}".format(i, np.mean(plate_pearsons[i]), np.std(plate_pearsons[i])))
+        print("    plate {} YFP performance: {}, std: {}; DAPI performance: {}, std: {}".format(i, np.mean(null_YFP_pearsons[i]), np.std(null_YFP_pearsons[i]), np.mean(null_DAPI_pearsons[i]), np.std(null_DAPI_pearsons[i])))
+        model_performances.append(np.mean(plate_pearsons[i]))
+        model_stds.append(np.std(plate_pearsons[i]))
+        null_YFP_performances.append(np.mean(null_YFP_pearsons[i]))
+        null_YFP_stds.append(np.std(null_YFP_pearsons[i]))
+        null_DAPI_performances.append(np.mean(null_DAPI_pearsons[i]))
+        null_DAPI_stds.append(np.std(null_DAPI_pearsons[i]))
+    pickle.dump(model_performances, open("pickles/separatePlateTestModelPerformances.pkl", "wb"))
+    pickle.dump(model_stds, open("pickles/separatePlateTestModelStds.pkl", "wb"))
+    pickle.dump(null_YFP_performances, open("pickles/separatePlateTestYFPPerformances.pkl", "wb"))
+    pickle.dump(null_YFP_stds, open("pickles/separatePlateTestYFPStds.pkl", "wb"))
+    pickle.dump(null_DAPI_performances, open("pickles/separatePlateTestDAPIPerformances.pkl", "wb"))
+    pickle.dump(null_DAPI_stds, open("pickles/separatePlateTestDAPIStds.pkl", "wb"))
+
 def getMSE(loadName=None, model=None, validation_generator=None, device=None):
     """
     LOADNAME specifies the name of the model to load
@@ -236,12 +288,11 @@ def getMSE(loadName=None, model=None, validation_generator=None, device=None):
     performance = []
     total_step = len(validation_generator)
     with torch.set_grad_enabled(False):
-        for local_batch, local_labels in validation_generator:
+        for names, local_batch, local_labels in validation_generator:
             local_batch, local_labels = local_batch.to(device), local_labels.to(device)
             outputs = model(local_batch)
             mse = calculateMSE(outputs, local_labels)
             performance.append(mse)
-            print(mse)
     print("global peformance (mse): ", np.mean(performance), np.std(performance))
     pickle.dump((np.mean(performance), np.std(performance)), open("pickles/ML_model_MSE_performance.pkl", "wb"))
 
@@ -259,7 +310,7 @@ def getNull(validation_generator=None, device=None):
     DAPI_MSE_performance = []
     total_step = len(validation_generator)
     with torch.set_grad_enabled(False):
-        for local_batch, local_labels in validation_generator:
+        for names, local_batch, local_labels in validation_generator:
             j += 1
             local_batch, local_labels = local_batch.to(device), local_labels.to(device)
             YFP = local_batch[:, 0, :, :]
@@ -306,7 +357,7 @@ def getROC(lab_thresh, sample_size, model=None, loadName=None, validation_genera
         null_DAPI_mapp[t] = []
     with torch.set_grad_enabled(False):
         j = 0
-        for local_batch, local_labels in validation_generator:
+        for names, local_batch, local_labels in validation_generator:
             local_batch, local_labels = local_batch.to(device), local_labels.to(device)
             outputs = model(local_batch)
             for t in threshs:
@@ -554,7 +605,7 @@ def ablationTest(sample_size=1000000, validation_generator=None, ablate_DAPI_onl
         total_step = len(validation_generator)
         j = 0
         with torch.set_grad_enabled(False):
-            for local_batch, local_labels in validation_generator:
+            for names, local_batch, local_labels in validation_generator:
                 j += 1   
                 local_batch = local_batch.cpu().numpy()
                 img_dim = local_batch.shape[-1]
