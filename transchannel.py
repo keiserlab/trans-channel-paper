@@ -78,13 +78,80 @@ class ImageDataset(Dataset):
         dest[1,:] = DAPI_img
         return x, dest, t_img
 
+class OsteosarcomaDataset(Dataset):
+    """
+    Image dataset for the osteosarcoma system,
+    csv should be in the form d2, d1, d0, such that
+    d0 will be the Hoechst input image name, and d1 will be the cyclin-B1 label image name, d2 is a marker not used in this study, and can be ignored
+    """
+    def __init__(self, csv_file):
+        self.data = pd.read_csv(csv_file).values
+    
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, idx):
+        d2, d1, d0 = self.data[idx]
+        if "keiserlab" not in hostname: #if on butte lab server 
+            d2 = d2.replace("/srv/nas/mk1/users/dwong/", "/data1/wongd/") 
+            d1 = d1.replace("/srv/nas/mk1/users/dwong/", "/data1/wongd/")
+            d0 = d0.replace("/srv/nas/mk1/users/dwong/", "/data1/wongd/")
+        else: #if on keiser server
+            d2 = d2.replace("/data1/wongd/", "/srv/nas/mk1/users/dwong/") 
+            d1 = d1.replace("/data1/wongd/", "/srv/nas/mk1/users/dwong/")
+            d0 = d0.replace("/data1/wongd/", "/srv/nas/mk1/users/dwong/")
+        d0_img = cv2.imread(d0, cv2.IMREAD_UNCHANGED)
+        d0_img = d0_img.astype(np.float32) 
+        d0_img = (d0_img / 65535.0) * 255
+        d1_img = cv2.imread(d1, cv2.IMREAD_UNCHANGED)
+        d1_img = d1_img.astype(np.float32)
+        d1_img = (d1_img / 65535.0) * 255
+        return d0, d0_img.reshape(1,d0_img.shape[-1],d0_img.shape[-1]), d1_img
+
+class OsteosarcomaAblationDataset(Dataset):
+    """
+    Image Dataset for ablation testing of the osteosarcoma dataset 
+    Csv should be in the form d2, d1, d0, such that
+    d0 will be the Hoechst input image name, and d1 will be the cyclin-B1 label image name, d2 is a marker not used in this study, and can be ignored
+    """
+    def __init__(self, csv_file, thresh_percent):
+        self.data = pd.read_csv(csv_file).values
+        self.thresh_percent = thresh_percent
+    def __len__(self):
+        return len(self.data)
+    def __getitem__(self, idx):
+        d2, d1, d0 = self.data[idx]
+        if "keiserlab" not in hostname: #if on butte lab server 
+            d2 = d2.replace("/srv/nas/mk1/users/dwong/", "/data1/wongd/") 
+            d1 = d1.replace("/srv/nas/mk1/users/dwong/", "/data1/wongd/")
+            d0 = d0.replace("/srv/nas/mk1/users/dwong/", "/data1/wongd/")
+        else: #if on keiser server
+            d2 = d2.replace("/data1/wongd/", "/srv/nas/mk1/users/dwong/") 
+            d1 = d1.replace("/data1/wongd/", "/srv/nas/mk1/users/dwong/")
+            d0 = d0.replace("/data1/wongd/", "/srv/nas/mk1/users/dwong/")
+        d0_img = cv2.imread(d0, cv2.IMREAD_UNCHANGED)
+        d0_img = d0_img.astype(np.float32) #breaks here 
+        d0_img = (d0_img / 65535.0) * 255
+        d1_img = cv2.imread(d1, cv2.IMREAD_UNCHANGED)
+        d1_img = d1_img.astype(np.float32)
+        d1_img = (d1_img / 65535.0) * 255
+        ##ablate bottom x% of pixels to 0
+        thresh_index = int(1104 * 1104 * self.thresh_percent)
+        sorted_d0 = np.sort(d0_img, axis=None)
+        if self.thresh_percent == 1:
+            threshold = 10000000
+        else:
+            threshold = sorted_d0[thresh_index]
+        d0_img[d0_img < threshold] = 0
+        return d0_img.reshape(1,img_dim,img_dim), d1_img
+
 class Unet_mod(nn.Module):
     """
     The deep learning architecture inspired by Unet (Ronneberger et al. 2015), Motif: upsample, follow by 2x2 conv, concatenate with early layers (skip connections), transpose convolution 
     """
-    def __init__(self):
+    def __init__(self, inputChannels=2):
         super(Unet_mod, self).__init__()
-        self.conv1 = nn.Conv2d(2, 32, 3) 
+        self.conv1 = nn.Conv2d(inputChannels, 32, 3) 
         self.conv2 = nn.Conv2d(32, 64, 3)  
         self.conv3 = nn.Conv2d(64, 128, 3)  
         self.conv4 = nn.Conv2d(128, 256, 3)  
@@ -105,7 +172,7 @@ class Unet_mod(nn.Module):
         self.upsamp2 = nn.Upsample(size=(510,510), mode='bilinear', align_corners=True)#size = h3 - 1
         self.upsamp3 = nn.Upsample(size=(1022,1022), mode='bilinear', align_corners=True) #size = h1 - 1
         self.upsamp4 = nn.Upsample(size=(2047,2047), mode='bilinear', align_corners=True)
-        self.transpose1 = nn.ConvTranspose2d(512,512,2)
+        self.transpose1 = nn.ConvTranspose2d(512,512,2) #not used, but needs to be here to load previously saved state dictionaries of older models that left this unused attribute as part of the state dictionary, legacy artifact
         
     def forward(self, x):
         h0 = x.view(x.shape[0], x.shape[1], x.shape[-1], x.shape[-1])
@@ -131,6 +198,62 @@ class Unet_mod(nn.Module):
         h18 = self.upsamp4(h17)
         h19 = nn.functional.relu(self.conv12(h18))
         h20 = nn.functional.relu(self.conv13(torch.cat((h0,h19), dim=1))) 
+        return h20
+
+class Unet_mod_osteo(nn.Module):
+    """
+    Same architecture as Unet_mod, but the osteosarcoma training procedure occurred much later than the training for the tauopathy dataset 
+    As a result, the architecture was updated to not include the self.transpose attribute that was included in class Unet_mod,
+    unfortunately, models for the osteosarcoma dataset were saved without this attribute, so the class Unet_mod will not work, and we need this class to load the osteosarcoma models, this is a legacy artifact but necessary
+    """
+    def __init__(self, inputChannels=1):
+        super(Unet_mod_osteo, self).__init__()
+        self.conv1 = nn.Conv2d(inputChannels, 32, 3) 
+        self.conv2 = nn.Conv2d(32, 64, 3)  
+        self.conv3 = nn.Conv2d(64, 128, 3)  
+        self.conv4 = nn.Conv2d(128, 256, 3)  
+        self.conv5 = nn.Conv2d(256, 512, 3) 
+        self.conv6 = nn.Conv2d(512, 256, 2) #
+        self.conv7 = nn.ConvTranspose2d(256+256, 256, 3)  
+        self.conv8 = nn.Conv2d(256, 128, 2) #
+        self.conv9 = nn.ConvTranspose2d(128+128, 128, 3) 
+        self.conv10 = nn.Conv2d(128, 64, 2) #
+        self.conv11 = nn.ConvTranspose2d(64+64, 64, 3) 
+        self.conv12 = nn.Conv2d(64, 32, 2) #
+        self.conv13 = nn.ConvTranspose2d(32+32, 1, 3)  
+        self.maxp1 = nn.MaxPool2d(2, stride=2, ceil_mode=True, return_indices=True)
+        self.maxp2 = nn.MaxPool2d(2, stride=2, ceil_mode=True, return_indices=True)
+        self.maxp3 = nn.MaxPool2d(2, stride=2, ceil_mode=True, return_indices=True)
+        self.maxp4 = nn.MaxPool2d(2, stride=2, ceil_mode=True, return_indices=True)
+        self.upsamp1 = nn.Upsample(size=(136,136),mode='bilinear', align_corners=True) #size = h5 - 1
+        self.upsamp2 = nn.Upsample(size=(274,274), mode='bilinear', align_corners=True)#size = h3 - 1
+        self.upsamp3 = nn.Upsample(size=(550,550), mode='bilinear', align_corners=True) #size = h1 - 1
+        self.upsamp4 = nn.Upsample(size=(1103,1103), mode='bilinear', align_corners=True)
+
+    def forward(self, x):
+        h0 = x.view(x.shape[0], x.shape[1], x.shape[-1], x.shape[-1])
+        h0 = nn.functional.relu(self.conv1(h0))
+        h1, p1indices = self.maxp1(h0) #1 x 32 x 127 x 127
+        h2 = nn.functional.relu(self.conv2(h1))
+        h3, p2indices = self.maxp2(h2) #63 x 63
+        h4 = nn.functional.relu(self.conv3(h3))
+        h5, p3indices = self.maxp3(h4) #31 x 31
+        h6 = nn.functional.relu(self.conv4(h5))
+        h7, p4indices = self.maxp4(h6) #15 x 15
+        h8 = nn.functional.relu(self.conv5(h7))
+        #upsamp, 2x2 conv, 3x3 transposed_conv with stitch 
+        h9 = self.upsamp1(h8) 
+        h10 = nn.functional.relu(self.conv6(h9))
+        h11 = nn.functional.relu(self.conv7(torch.cat((h6,h10), dim=1)))
+        h12 = self.upsamp2(h11)
+        h13 = nn.functional.relu(self.conv8(h12))
+        h14 = nn.functional.relu(self.conv9(torch.cat((h4,h13), dim=1)))
+        h15 = self.upsamp3(h14)
+        h16 = nn.functional.relu(self.conv10(h15))
+        h17 = nn.functional.relu(self.conv11(torch.cat((h2,h16), dim=1)))
+        h18 = self.upsamp4(h17)
+        h19 = nn.functional.relu(self.conv12(h18))
+        h20 = nn.functional.relu(self.conv13(torch.cat((h0,h19), dim=1))) #127 x 127
         return h20
 
 def train(continue_training=False, model=None, max_epochs=20, training_generator=None, validation_generator=None, lossfn=None, optimizer=None, plotName=None, device=None):
@@ -200,7 +323,7 @@ def test(sample_size=1000000, model=None, loadName=None, validation_generator=No
     epoch = checkpoint['epoch']
     loss = checkpoint['loss']
     model.eval()
-    performance = []
+    performance, null_performance = [], []
     total_step = len(validation_generator)
     j = 0
     running_loss = 0
@@ -216,8 +339,10 @@ def test(sample_size=1000000, model=None, loadName=None, validation_generator=No
             if j == sample_size:
                 break
             performance.append(pearson) 
+            null_performance.append(getPearson(local_batch[:, 0, :, :], local_labels))
     print("time elapsed: ", time.time() - start_time)
-    print("global performance: ", np.mean(performance), np.std(performance))
+    print("global ML performance: ", np.mean(performance), np.std(performance))
+    print("global Null performance (0th channel): ", np.mean(null_performance), np.std(null_performance))
     print("global loss: ", running_loss / float(j))
     pickle.dump((np.mean(performance), np.std(performance)), open("pickles/ML_model_pearson_performance.pkl", "wb"))
 
@@ -319,6 +444,7 @@ def getNull(validation_generator=None, device=None):
             DAPI_pearson_performance.append(getPearson(DAPI, local_labels))
             YFP_MSE_performance.append(calculateMSE(YFP, local_labels))
             DAPI_MSE_performance.append(calculateMSE(DAPI, local_labels))
+            print(YFP_MSE_performance)
     print("global null YFP pearson performance: ", np.mean(YFP_pearson_performance), np.std(YFP_pearson_performance))
     print("global null DAPI pearson performance: ", np.mean(DAPI_pearson_performance), np.std(DAPI_pearson_performance))
     print("global null YFP MSE performance: ", np.mean(YFP_MSE_performance), np.std(YFP_MSE_performance))
@@ -582,14 +708,14 @@ class AblationDataset(Dataset):
         dest[1,:] = DAPI_img
         return dest, t_img
 
-def ablationTest(sample_size=1000000, validation_generator=None, ablate_DAPI_only=False, model=None, loadName=None, device=None):
+def ablationTestTau(sample_size=1000000, validation_generator=None, ablate_DAPI_only=False, model=None, loadName=None, device=None):
     """
     SAMPLE_SIZE is the number of images to evaluate from the VALIDATION_GENERATOR
     VALIDATION_GENERATOR is the generator that iterates over validation/test images to evaluate
     If ABLATE_DAPI_ONLY, then will only ablate the DAPI input and leave YFP-tau alone 
     LOADNAME is the name of the model to load and evaluate 
     DEVICE is the cuda device to allocate to
-    Method to run the model on the test set and print pearson performance under a range of ablation conditions
+    Method to run the model on the tauopathy test set and print pearson performance under a range of ablation conditions
     """
     ablations = list(np.arange(0, .1, .02))
     ablations += list(np.arange(.1, 1.1, .1))
@@ -609,7 +735,7 @@ def ablationTest(sample_size=1000000, validation_generator=None, ablate_DAPI_onl
                 j += 1   
                 local_batch = local_batch.cpu().numpy()
                 img_dim = local_batch.shape[-1]
-                local_batch = local_batch.reshape((2,img_dim, img_dim))
+                local_batch = local_batch.reshape((local_batch.shape[1],img_dim, img_dim)) ##local_batch.shape[1] is number of channels
                 YFP = local_batch[0]
                 DAPI = local_batch[1]
                 thresh_index = int(img_dim * img_dim * a)
@@ -634,7 +760,7 @@ def ablationTest(sample_size=1000000, validation_generator=None, ablate_DAPI_onl
                 local_labels = local_labels.to(device)
                 outputs = model(local_batch)
                 pearson = getPearson(outputs, local_labels)            
-                # print(str(j) + "/" + str(total_step) + ", batch pearson: ", pearson)
+                print(str(j) + "/" + str(total_step) + ", batch pearson: ", pearson)
                 if j == sample_size:
                     break
                 performance.append(pearson) 
@@ -643,4 +769,59 @@ def ablationTest(sample_size=1000000, validation_generator=None, ablate_DAPI_onl
         stds.append(np.std(performance))
         print("ablation: {}, global performance: avg={}, std= {}".format(a, np.mean(performance), np.std(performance)))
     
+def ablationTestOsteosarcoma(sample_size=1000000, validation_generator=None,  model=None, loadName=None, device=None):
+    """
+    SAMPLE_SIZE is the number of images to evaluate from the VALIDATION_GENERATOR
+    VALIDATION_GENERATOR is the generator that iterates over validation/test images to evaluate
+    LOADNAME is the name of the model to load and evaluate 
+    DEVICE is the cuda device to allocate to
+    Method to run the model on the osteosarcoma test set and print pearson performance under a range of ablation conditions
+
+    """
+    ablations = list(np.arange(0, .1, .02))
+    ablations += list(np.arange(.1, .9, .1))
+    ablations += list(np.arange(.9, 1.02, .02))
+    x = []
+    y = []
+    y_null = []
+    start_time = time.time()
+    checkpoint = torch.load(loadName, map_location='cuda:0')
+    model.load_state_dict(checkpoint['model_state_dict'])
+    model.eval()
+    for a in ablations:
+        print("ablation", a)
+        performance = []
+        null_performance = []
+        total_step = len(validation_generator)
+        j = 0
+        with torch.set_grad_enabled(False):
+            for names, local_batch, local_labels in validation_generator:
+                j += 1
+                ##ablate bottom x% of pixels to 0
+                local_batch = local_batch.cpu().numpy()
+                img_dim = local_batch.shape[-1]
+                local_batch = local_batch.reshape((img_dim, img_dim))
+                thresh_index = int(1104 * 1104 * a)
+                sorted_local_batch = np.sort(local_batch, axis=None)
+                if a == 1:
+                    threshold = 10000000
+                else:
+                    threshold = sorted_local_batch[thresh_index]
+                local_batch = local_batch.reshape((1, 1, img_dim, img_dim))
+                local_batch = torch.from_numpy(local_batch).float().to(device)
+                local_labels = local_labels.to(device)
+                outputs = model(local_batch)
+                pearson = getPearson(outputs, local_labels)    
+                performance.append(pearson) 
+                print(pearson)
+                null_performance.append(getPearson(local_batch, local_labels))
+                if j == sample_size:
+                    break       
+        x.append(a)
+        y.append(np.mean(performance))
+        y_null.append(np.mean(null_performance))
+        print("global performance: ", np.mean(performance), np.std(performance))
+    print("x: ", x)
+    print("y: ", y)
+    print("y_null: ", y_null)
 
