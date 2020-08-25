@@ -25,7 +25,6 @@ if fold in [1,2,3]:
     cross_val = True
 else:
     cross_val = False
-img_dim = 2048
 plotName = "MODEL_NAME".format(fold) #name used to save model 
 if "keiserlab" in hostname: ##if on keiser lab server, else butte lab server 
     if cross_val:
@@ -66,7 +65,7 @@ if len(gpu_list) > 1:
 model = model.to(device)
 optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=.9)
 ## Random seed for data split 
-dataset = ImageDataset(csv_name, inputMin, inputMax, DAPIMin, DAPIMax, labelMin, labelMax, img_dim)
+dataset = ImageDataset(csv_name, inputMin, inputMax, DAPIMin, DAPIMax, labelMin, labelMax)
 dataset_size = len(dataset)
 indices = list(range(dataset_size))
 split = int(np.floor(.3 * dataset_size)) #30% test 
@@ -91,17 +90,26 @@ else: #if we're specifying a 70% train, 30% test split
 training_generator = data.DataLoader(dataset, sampler=train_sampler, **train_params)
 validation_generator = data.DataLoader(dataset,sampler=test_sampler, **test_params)
 
+
+#============================================================================
+#============================================================================
+## BRIEF TESTS
+#============================================================================
+#============================================================================
+##make sure train and test are separate and there's zero overlap
+assert(len(set(train_indices).intersection(test_indices)) == 0)
+
+
 #============================================================================
 #============================================================================
 ## METHOD CALLS
 #============================================================================
 #============================================================================
-
 # train(continue_training=False, model=model, max_epochs=max_epochs, training_generator=training_generator, validation_generator=validation_generator, lossfn=lossfn, optimizer=optimizer, plotName="plotName",device=device)
-test(sample_size=1000000, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=validation_generator, lossfn=lossfn,device=device)
-testOnSeparatePlates(sample_size=1000, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=validation_generator, lossfn=lossfn, device=device)
-getMSE(loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", model=model, validation_generator=validation_generator, device=device)
-getNull(validation_generator=validation_generator,device=device)
-getROC(lab_thresh=1.0, sample_size=1000000, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=validation_generator, device=device)
-ablationTestTau(sample_size=1000000, validation_generator=validation_generator, ablate_DAPI_only=False, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt",device=device)
+test(sample_size=100, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=validation_generator, lossfn=lossfn,device=device)
+# testOnSeparatePlates(sample_size=1000, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=validation_generator, lossfn=lossfn, device=device)
+# getMSE(loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", model=model, validation_generator=validation_generator, device=device)
+# getNull(validation_generator=validation_generator,device=device)
+# getROC(lab_thresh=1.0, sample_size=1000000, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=validation_generator, device=device)
+# ablationTestTau(sample_size=1000000, validation_generator=validation_generator, ablate_DAPI_only=False, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt",device=device)
 

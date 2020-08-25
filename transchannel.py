@@ -39,7 +39,7 @@ class ImageDataset(Dataset):
     Dataset of tau images. CSV_FILE should be a csv of x,t pairs of full-path strings corresponding to image names.
     x is the YFP-tau image name, and t is the AT8-pTau image name. 
     """
-    def __init__(self, csv_file, inputMin, inputMax, DAPIMin, DAPIMax, labelMin, labelMax,img_dim):
+    def __init__(self, csv_file, inputMin, inputMax, DAPIMin, DAPIMax, labelMin, labelMax):
         self.data = pd.read_csv(csv_file).values
         self.inputMin = inputMin
         self.inputMax = inputMax
@@ -47,8 +47,7 @@ class ImageDataset(Dataset):
         self.DAPIMax = DAPIMax
         self.labelMin = labelMin
         self.labelMax = labelMax
-        self.img_dim = img_dim
-    
+         
     def __len__(self):
         return len(self.data)
     
@@ -73,7 +72,8 @@ class ImageDataset(Dataset):
         t_img = cv2.imread(t, cv2.IMREAD_UNCHANGED)
         t_img = t_img.astype(np.float32)
         t_img = ((t_img - self.labelMin) / (self.labelMax - self.labelMin)) * 255
-        dest = np.zeros((2,self.img_dim,self.img_dim), dtype=np.float32)
+        img_dim = x_img.shape[-1]
+        dest = np.zeros((2,img_dim,img_dim), dtype=np.float32)
         dest[0,:] = x_img
         dest[1,:] = DAPI_img
         return x, dest, t_img
@@ -143,7 +143,8 @@ class OsteosarcomaAblationDataset(Dataset):
         else:
             threshold = sorted_d0[thresh_index]
         d0_img[d0_img < threshold] = 0
-        return d0_img.reshape(1,img_dim,img_dim), d1_img
+        img_dim = d0_img.shape[-1]
+        return d0, d0_img.reshape(1,img_dim,img_dim), d1_img
 
 class Unet_mod(nn.Module):
     """
@@ -315,7 +316,7 @@ def test(sample_size=1000000, model=None, loadName=None, validation_generator=No
     VALIDATION_GENERATOR is the generator that iterates over validation/test images
     LOSSFN is the loss function to use
     DEVICE is the cuda device to allocate to  
-    Print the pearson performance, and pickle the result to pickles/
+    Print the pearson performance and mse performance of both the ML Model and also the Null Model (0th channel) and pickle the result to pickles/
     """
     start_time = time.time()
     checkpoint = torch.load(loadName)
@@ -323,7 +324,7 @@ def test(sample_size=1000000, model=None, loadName=None, validation_generator=No
     epoch = checkpoint['epoch']
     loss = checkpoint['loss']
     model.eval()
-    performance, null_performance = [], []
+    performance, null_performance, mse_performance, null_mse_performance = [], [], [], []
     total_step = len(validation_generator)
     j = 0
     running_loss = 0
@@ -335,16 +336,24 @@ def test(sample_size=1000000, model=None, loadName=None, validation_generator=No
             loss = lossfn(outputs, local_labels)
             running_loss += loss 
             pearson = getPearson(outputs, local_labels)
-            print(str(j) + "/" + str(total_step) + ", batch pearson: ", pearson)
-            if j == sample_size:
-                break
             performance.append(pearson) 
             null_performance.append(getPearson(local_batch[:, 0, :, :], local_labels))
+            mse_performance.append(calculateMSE(outputs, local_labels))
+            null_mse_performance.append(calculateMSE(local_batch[:, 0, :, :], local_labels))
+            # print(str(j) + "/" + str(total_step) + ", batch pearson: ", pearson)
+            if j == sample_size:
+                break
+    ml_model_perf = np.mean(performance), np.std(performance)
+    null_model_perf = np.mean(null_performance), np.std(null_performance)
+    ml_model_mse_perf = np.mean(mse_performance), np.std(mse_performance)
+    null_model_mse_perf = np.mean(null_mse_performance), np.std(null_mse_performance)
     print("time elapsed: ", time.time() - start_time)
-    print("global ML performance: ", np.mean(performance), np.std(performance))
-    print("global Null performance (0th channel): ", np.mean(null_performance), np.std(null_performance))
+    print("global ML pearson performance: ", ml_model_perf)
+    print("global null pearson performance (0th channel): ", null_model_perf) 
+    print("global MSE performance: ", ml_model_mse_perf)
+    print("global null MSE performance (0th channel): ", null_model_mse_perf)
     print("global loss: ", running_loss / float(j))
-    pickle.dump((np.mean(performance), np.std(performance)), open("pickles/ML_model_pearson_performance.pkl", "wb"))
+    return ml_model_perf, null_model_perf, ml_model_mse_perf, null_model_mse_perf
 
 def testOnSeparatePlates(sample_size, model=None, loadName=None, validation_generator=None, lossfn=None, device=None):
     """
@@ -365,6 +374,7 @@ def testOnSeparatePlates(sample_size, model=None, loadName=None, validation_gene
     with torch.set_grad_enabled(False):
         for names, local_batch, local_labels in validation_generator:
             plateNumber = int(names[0][names[0].find("plate") + 5 :names[0].find("plate") + 6]) ##given plate number <= 9!
+            assert(plateNumber < 10)
             j += 1
             local_batch, local_labels = local_batch.to(device), local_labels.to(device)
             outputs = model(local_batch)       
@@ -398,61 +408,6 @@ def testOnSeparatePlates(sample_size, model=None, loadName=None, validation_gene
     pickle.dump(null_YFP_stds, open("pickles/separatePlateTestYFPStds.pkl", "wb"))
     pickle.dump(null_DAPI_performances, open("pickles/separatePlateTestDAPIPerformances.pkl", "wb"))
     pickle.dump(null_DAPI_stds, open("pickles/separatePlateTestDAPIStds.pkl", "wb"))
-
-def getMSE(loadName=None, model=None, validation_generator=None, device=None):
-    """
-    LOADNAME specifies the name of the model to load
-    MODEL should be of type nn.Module, and specifies the architecture to use 
-    VALIDATION_GENERATOR is the generator that iterates over validation/test images
-    calculates the MSE of ML predictions, pickles the results to pickles/
-    DEVICE is the cuda device to allocate to 
-    """
-    checkpoint = torch.load(loadName)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    model.eval()
-    performance = []
-    total_step = len(validation_generator)
-    with torch.set_grad_enabled(False):
-        for names, local_batch, local_labels in validation_generator:
-            local_batch, local_labels = local_batch.to(device), local_labels.to(device)
-            outputs = model(local_batch)
-            mse = calculateMSE(outputs, local_labels)
-            performance.append(mse)
-    print("global peformance (mse): ", np.mean(performance), np.std(performance))
-    pickle.dump((np.mean(performance), np.std(performance)), open("pickles/ML_model_MSE_performance.pkl", "wb"))
-
-def getNull(validation_generator=None, device=None):
-    """
-    VALIDATION_GENERATOR is the generator that iterates over validation/test images
-    DEVICE is the cuda device to allocate to
-    Calculates the null Pearson and MSE performance of the dataset (i.e. pearson(input, label)) comparing YFP to AT8, and comparing DAPI to AT8
-    Pickles the results to pickles/
-    """
-    j = 0
-    YFP_pearson_performance = []
-    YFP_MSE_performance = []
-    DAPI_pearson_performance = []
-    DAPI_MSE_performance = []
-    total_step = len(validation_generator)
-    with torch.set_grad_enabled(False):
-        for names, local_batch, local_labels in validation_generator:
-            j += 1
-            local_batch, local_labels = local_batch.to(device), local_labels.to(device)
-            YFP = local_batch[:, 0, :, :]
-            DAPI = local_batch[:, 1, :, :]
-            YFP_pearson_performance.append(getPearson(YFP, local_labels)) #NULL autoencode model 
-            DAPI_pearson_performance.append(getPearson(DAPI, local_labels))
-            YFP_MSE_performance.append(calculateMSE(YFP, local_labels))
-            DAPI_MSE_performance.append(calculateMSE(DAPI, local_labels))
-            print(YFP_MSE_performance)
-    print("global null YFP pearson performance: ", np.mean(YFP_pearson_performance), np.std(YFP_pearson_performance))
-    print("global null DAPI pearson performance: ", np.mean(DAPI_pearson_performance), np.std(DAPI_pearson_performance))
-    print("global null YFP MSE performance: ", np.mean(YFP_MSE_performance), np.std(YFP_MSE_performance))
-    print("global null DAPI MSE performance: ", np.mean(DAPI_MSE_performance), np.std(DAPI_MSE_performance))
-    pickle.dump((np.mean(YFP_pearson_performance), np.std(YFP_pearson_performance)), open("pickles/YFP_model_pearson_performance.pkl", "wb"))
-    pickle.dump((np.mean(YFP_MSE_performance), np.std(YFP_MSE_performance)), open("pickles/YFP_model_MSE_performance.pkl", "wb"))
-    pickle.dump((np.mean(DAPI_pearson_performance), np.std(DAPI_pearson_performance)), open("pickles/DAPI_model_pearson_performance.pkl", "wb"))
-    pickle.dump((np.mean(DAPI_MSE_performance), np.std(DAPI_MSE_performance)), open("pickles/DAPI_model_MSE_performance.pkl", "wb"))
 
 def getROC(lab_thresh, sample_size, model=None, loadName=None, validation_generator=None, device=None):
     """
@@ -665,7 +620,7 @@ def getMetrics(predicted, labels, lab_thresh=None, pred_thresh=None):
 #============================================================================
 #============================================================================
 
-class AblationDataset(Dataset):
+class TauAblationDataset(Dataset):
     """
     Dataset in which we ablate the bottom x% of pixels to be 0 valued
     This is to test if image bleed through is an issue
@@ -775,7 +730,7 @@ def ablationTestOsteosarcoma(sample_size=1000000, validation_generator=None,  mo
     VALIDATION_GENERATOR is the generator that iterates over validation/test images to evaluate
     LOADNAME is the name of the model to load and evaluate 
     DEVICE is the cuda device to allocate to
-    Method to run the model on the osteosarcoma test set and print pearson performance under a range of ablation conditions
+    Method to run the MODEL on the osteosarcoma test set and print pearson performance under a range of ablation conditions
 
     """
     ablations = list(np.arange(0, .1, .02))
