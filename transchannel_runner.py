@@ -97,7 +97,6 @@ validation_generator = data.DataLoader(dataset,sampler=test_sampler, **test_para
 #============================================================================
 #============================================================================
 ##make sure train and test are separate and there's zero overlap
-assert(len(set(train_indices).intersection(test_indices)) == 0)
 
 
 #============================================================================

@@ -426,12 +426,21 @@ def getROC(lab_thresh, sample_size, model=None, loadName=None, validation_genera
     mapp = {} #will correspond to ML model results
     null_mapp = {} #will correspond to Null YFP model results
     null_DAPI_mapp = {} #will correspond to Null DAPI model results
-    threshs = list(np.arange(0, .9, .1)) #threshs are the various thresholds that we will use to binarize our predicted label images
-    threshs += list(np.arange(.90, 1.1, .01))
-    threshs +=  list(np.arange(1.1, 2, .1)) 
-    threshs +=  list(np.arange(2, 5, 1)) 
+    # threshs = list(np.arange(0, .9, .1)) #threshs are the various thresholds that we will use to binarize our predicted label images
+    # threshs += list(np.arange(.90, 1.1, .01))
+    # threshs +=  list(np.arange(1.1, 2, .1)) 
+    # threshs +=  list(np.arange(2, 5, 1)) 
+    # threshs.append(30) 
+    # threshs.append(1000)
+
+    threshs = list(np.arange(-1, -.1, .1)) #threshs are the various thresholds that we will use to binarize our predicted label images
+    threshs += list(np.arange(-.1, .1, .01))
+    threshs +=  list(np.arange(.1, 1, .1)) 
+    threshs +=  list(np.arange(1, 4, 1)) 
     threshs.append(30) 
     threshs.append(1000)
+
+
     for t in threshs:
         mapp[t] = [] #thresh to list of (FPR, TPR) points
         null_mapp[t] = []
@@ -465,19 +474,23 @@ def getROC(lab_thresh, sample_size, model=None, loadName=None, validation_genera
             x = [t[1] for t in coordinates]
             y = [t[2] for t in coordinates]
             if i == 0:
-                pickle.dump(x, open("pickles/null_mapp_x_values_fold_{}.pk".format(fold), "wb"))
-                pickle.dump(y, open("pickles/null_mapp_y_values_fold_{}.pk".format(fold),  "wb"))
+                # pickle.dump(x, open("pickles/null_mapp_x_values_fold_{}.pk".format(fold), "wb"))
+                # pickle.dump(y, open("pickles/null_mapp_y_values_fold_{}.pk".format(fold),  "wb"))
+                null_YFP_x, null_YFP_y = x, y
             if i == 1:
-                pickle.dump(x, open("pickles/null_DAPI_mapp_x_values_fold_{}.pk".format(fold), "wb"))
-                pickle.dump(y, open("pickles/null_DAPI_mapp_y_values_fold_{}.pk".format(fold), "wb"))
+                # pickle.dump(x, open("pickles/null_DAPI_mapp_x_values_fold_{}.pk".format(fold), "wb"))
+                # pickle.dump(y, open("pickles/null_DAPI_mapp_y_values_fold_{}.pk".format(fold), "wb"))
+                null_DAPI_x, null_DAPI_y = x, y
             if i == 2:
-                print("dumping pickle")
-                pickle.dump(x, open("pickles/mapp_x_values_fold_{}.pk".format(fold), "wb"))
-                pickle.dump(y, open("pickles/mapp_y_values_fold_{}.pk".format(fold), "wb"))
+                # pickle.dump(x, open("pickles/mapp_x_values_fold_{}.pk".format(fold), "wb"))
+                # pickle.dump(y, open("pickles/mapp_y_values_fold_{}.pk".format(fold), "wb"))
+                ML_x, ML_y = x, y
             i += 1
             labels, x, y = labels[::-1], x[::-1], y[::-1]
             auc = np.trapz(y,x)
             print("AUC: ", auc)
+        return ML_x, ML_y, null_YFP_x, null_YFP_y, null_DAPI_x, null_DAPI_y
+
        
 #============================================================================
 #============================================================================
