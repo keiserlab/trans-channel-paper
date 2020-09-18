@@ -87,16 +87,22 @@ if continue_training:
     model.train()
 
 
+shutil.rmtree("outputs/")
+os.mkdir("outputs/")
 #=======================================================================================
 #=======================================================================================
 #METHOD CALLS 
 #=======================================================================================
 #=======================================================================================
 
-train(continue_training=False, model=model, max_epochs=max_epochs, training_generator=training_generator, validation_generator=validation_generator, lossfn=lossfn, optimizer=optimizer, plotName="plotName",device=device)
+
+# train(continue_training=False, model=model, max_epochs=max_epochs, training_generator=training_generator, validation_generator=validation_generator, lossfn=lossfn, optimizer=optimizer, plotName="plotName",device=device)
 test(sample_size=1000000, model=model, loadName="models/d0_to_d1_cyclin_only_dataset_fold{}.pt".format(fold), validation_generator=validation_generator, lossfn=lossfn,device=device)
-getMSE(loadName="models/d0_to_d1_cyclin_only_dataset_fold{}.pt".format(fold), model=model, validation_generator=validation_generator, device=device)
-ablationTestOsteosarcoma(sample_size=1000000, validation_generator=validation_generator, model=model, loadName="models/d0_to_d1_cyclin_only_dataset_fold{}.pt".format(fold),device=device)
+# if task == "ablation":
+    # test(sample_size=1000000, model=model, loadName="models/d0_to_d1_ablation_cyclin_only_dataset_fold{}_continue_training.pt".format(fold), validation_generator=validation_generator, lossfn=lossfn,device=device)
+# getMSE(loadName="models/d0_to_d1_cyclin_only_dataset_fold{}.pt".format(fold), model=model, validation_generator=validation_generator, device=device)
+# ablationTestOsteosarcoma(sample_size=1000000, validation_generator=validation_generator, model=model, loadName="models/d0_to_d1_cyclin_only_dataset_fold{}.pt".format(fold),device=device)
+# osteosarcomaAblatedAndNonAblated(sample_size=20, validation_generator=validation_generator, model=model, fold=fold, device=device)
 
 
 

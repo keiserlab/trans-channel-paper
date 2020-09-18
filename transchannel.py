@@ -36,8 +36,9 @@ hostname = socket.gethostname()
 #============================================================================
 class ImageDataset(Dataset):
     """
-    Dataset of tau images. CSV_FILE should be a csv of x,t pairs of full-path strings corresponding to image names.
-    x is the YFP-tau image name, and t is the AT8-pTau image name. 
+    Dataset of tau images. getitem returns (YFP name, YFP + DAPI concatenated image, AT8 pTau image)
+    CSV_FILE should be a csv of x,t pairs of full-path strings corresponding to image names
+    x is the YFP-tau image name, and t is the AT8-pTau image name
     """
     def __init__(self, csv_file, inputMin, inputMax, DAPIMin, DAPIMax, labelMin, labelMax):
         self.data = pd.read_csv(csv_file).values
@@ -78,9 +79,81 @@ class ImageDataset(Dataset):
         dest[1,:] = DAPI_img
         return x, dest, t_img
 
+class DAPIDataset(Dataset):
+    """
+    Dataset of DAPI/AT8 pTau images. getitem returns DAPI name, DAPI image, and AT8 pTau image
+    Used for supplemental analysis, and to assess whether or not we can learn the AT8 pTau channel solely from the DAPI channel
+    CSV_FILE should be a csv of x,t pairs of full-path strings corresponding to image names
+    x is the YFP-tau image name, and t is the AT8-pTau image name. 
+    """
+    def __init__(self, csv_file, DAPIMin, DAPIMax, labelMin, labelMax):
+        self.data = pd.read_csv(csv_file).values
+        self.DAPIMin = DAPIMin
+        self.DAPIMax = DAPIMax
+        self.labelMin = labelMin
+        self.labelMax = labelMax
+    def __len__(self):
+        return len(self.data)
+    def __getitem__(self, idx):
+        x, t = self.data[idx] 
+        if "keiserlab" not in hostname: #if on butte lab server 
+            x = x.replace("/fast/disk0/dwong/", "/data1/wongd/")
+            t = t.replace("/fast/disk0/dwong/", "/data1/wongd/")
+            x = x.replace("/srv/nas/mk3/users/dwong/", "/data1/wongd/") 
+            t = t.replace("/srv/nas/mk3/users/dwong/", "/data1/wongd/")
+        if "keiserlab" in hostname: 
+            x = x.replace("/data1/wongd/", "/srv/nas/mk3/users/dwong/")
+            t = t.replace("/data1/wongd/", "/srv/nas/mk3/users/dwong/")
+            x = x.replace("/fast/disk0/dwong/", "/srv/nas/mk3/users/dwong/")
+            t = t.replace("/fast/disk0/dwong/", "/srv/nas/mk3/users/dwong/")
+        DAPI_img = cv2.imread(getDAPI(x), cv2.IMREAD_UNCHANGED)
+        DAPI_img = DAPI_img.astype(np.float32)
+        DAPI_img = ((DAPI_img - self.DAPIMin) / (self.DAPIMax - self.DAPIMin)) * 255
+        t_img = cv2.imread(t, cv2.IMREAD_UNCHANGED)
+        t_img = t_img.astype(np.float32)
+        t_img = ((t_img - self.labelMin) / (self.labelMax - self.labelMin)) * 255
+        return x, DAPI_img, t_img
+
+class YFPDataset(Dataset):
+    """
+    Dataset of YFP-tau/AT8-pTau images. getitem returns YFP-tau name, YFP-tau image, and AT8 pTau image
+    Used for supplemental analysis, and to assess learning the AT8 pTau channel solely from the YFP-tau channel
+    CSV_FILE should be a csv of x,t pairs of full-path strings corresponding to image names
+    x is the YFP-tau image name, and t is the AT8-pTau image name. 
+    """
+    def __init__(self, csv_file, inputMin, inputMax, labelMin, labelMax):
+        self.data = pd.read_csv(csv_file).values
+        self.inputMin = inputMin
+        self.inputMax = inputMax
+        self.labelMin = labelMin
+        self.labelMax = labelMax
+    def __len__(self):
+        return len(self.data)
+    def __getitem__(self, idx):
+        x, t = self.data[idx] 
+        if "keiserlab" not in hostname: #if on butte lab server 
+            x = x.replace("/fast/disk0/dwong/", "/data1/wongd/")
+            t = t.replace("/fast/disk0/dwong/", "/data1/wongd/")
+            x = x.replace("/srv/nas/mk3/users/dwong/", "/data1/wongd/") 
+            t = t.replace("/srv/nas/mk3/users/dwong/", "/data1/wongd/")
+        if "keiserlab" in hostname: 
+            x = x.replace("/data1/wongd/", "/srv/nas/mk3/users/dwong/")
+            t = t.replace("/data1/wongd/", "/srv/nas/mk3/users/dwong/")
+            x = x.replace("/fast/disk0/dwong/", "/srv/nas/mk3/users/dwong/")
+            t = t.replace("/fast/disk0/dwong/", "/srv/nas/mk3/users/dwong/")
+        x_img = cv2.imread(x, cv2.IMREAD_UNCHANGED) 
+        x_img = x_img.astype(np.float32)
+        x_img = ((x_img - self.inputMin) / (self.inputMax - self.inputMin)) * 255
+        t_img = cv2.imread(t, cv2.IMREAD_UNCHANGED)
+        t_img = t_img.astype(np.float32)
+        t_img = ((t_img - self.labelMin) / (self.labelMax - self.labelMin)) * 255
+
+        return x, x_img, t_img
+
+
 class OsteosarcomaDataset(Dataset):
     """
-    Image dataset for the osteosarcoma system,
+    Image dataset for the osteosarcoma system, uses raw, unablated images
     csv should be in the form d2, d1, d0, such that
     d0 will be the Hoechst input image name, and d1 will be the cyclin-B1 label image name, d2 is a marker not used in this study, and can be ignored
     """
@@ -110,8 +183,8 @@ class OsteosarcomaDataset(Dataset):
 
 class OsteosarcomaAblationDataset(Dataset):
     """
-    Image Dataset for ablation testing of the osteosarcoma dataset 
-    Csv should be in the form d2, d1, d0, such that
+    Image Dataset for ablation of the the Hoechst channel in the osteosarcoma dataset 
+    csv should be in the form d2, d1, d0, such that
     d0 will be the Hoechst input image name, and d1 will be the cyclin-B1 label image name, d2 is a marker not used in this study, and can be ignored
     """
     def __init__(self, csv_file, thresh_percent):
@@ -204,8 +277,8 @@ class Unet_mod(nn.Module):
 class Unet_mod_osteo(nn.Module):
     """
     Same architecture as Unet_mod, but the osteosarcoma training procedure occurred much later than the training for the tauopathy dataset 
-    As a result, the architecture was updated to not include the self.transpose attribute that was included in class Unet_mod,
-    unfortunately, models for the osteosarcoma dataset were saved without this attribute, so the class Unet_mod will not work, and we need this class to load the osteosarcoma models, this is a legacy artifact but necessary
+    As a result, the architecture was updated to not include the self.transpose attribute that was included in class Unet_mod (included but also not used and had no function),
+    Models for the osteosarcoma dataset were saved without this attribute, so we need this class to load such models - this is a legacy artifact
     """
     def __init__(self, inputChannels=1):
         super(Unet_mod_osteo, self).__init__()
@@ -287,7 +360,12 @@ def train(continue_training=False, model=None, max_epochs=20, training_generator
             local_batch, local_labels = local_batch.to(device), local_labels.to(device)
             outputs = model(local_batch)
             loss = lossfn(outputs, local_labels)
-            running_loss += loss 
+            # print(loss)
+            if math.isnan(loss):
+                    i -= 1
+                    print("nan loss at epoch: {}, image name: {}".format(epoch, names))
+                    continue 
+            running_loss += loss             
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -490,6 +568,67 @@ def getROC(lab_thresh, sample_size, model=None, loadName=None, validation_genera
             auc = np.trapz(y,x)
             print("AUC: ", auc)
         return ML_x, ML_y, null_YFP_x, null_YFP_y, null_DAPI_x, null_DAPI_y
+
+def osteosarcomaAblatedAndNonAblated(sample_size=100, validation_generator=None, model=None, fold=None, device=None):
+    """
+    """
+    ablated_model = Unet_mod_osteo(inputChannels=1)
+    ablated_model = ablated_model.to(device)
+    checkpoint  = torch.load("models/d0_to_d1_ablation_cyclin_only_dataset_fold{}_continue_training.pt".format(fold), map_location='cuda:0') 
+    ablated_model.load_state_dict(checkpoint['model_state_dict'])
+    unablated_model = Unet_mod_osteo(inputChannels=1)
+    unablated_model = unablated_model.to(device)
+    checkpoint2  = torch.load("models/d0_to_d1_cyclin_only_dataset_fold{}.pt".format(fold), map_location='cuda:0') 
+    unablated_model.load_state_dict(checkpoint2['model_state_dict'])
+    i = 0
+    with torch.set_grad_enabled(False):
+        for names, local_batch, local_labels in validation_generator:
+            rand = np.random.randint(0,100000000)
+            img_dim = local_batch.shape[-1]
+           
+            ##plot raw Hoechst, raw cyclinB1 first
+            cv2.imwrite("outputs/" + str(rand) + "_a_OG_Hoechst.tif", ((local_batch.cpu().numpy().reshape(img_dim, img_dim) / 255) * 65535).astype(np.uint16))
+            cv2.imwrite("outputs/" + str(rand) + "_c_cyclinB1_label.tif", ((local_labels.cpu().numpy().reshape(img_dim, img_dim) / 255) * 65535).astype(np.uint16))
+            ##use unablated model to predict with raw image 
+            local_batch, local_labels = local_batch.to(device), local_labels.to(device)
+            unablated_outputs = unablated_model(local_batch)
+            pearson = getPearson(unablated_outputs, local_labels)
+            ##plot raw prediction of cyclinB1
+            cv2.imwrite("outputs/" + str(rand) + "_d_predicted_raw_pearson={}.tif".format(pearson), ((unablated_outputs.cpu().numpy().reshape(img_dim, img_dim) / 255) * 65535).astype(np.uint16))
+
+             ##ablate bottom 95% of pixels to 0
+            a = .95
+            local_batch = local_batch.cpu().numpy()
+            img_dim = local_batch.shape[-1]
+            local_batch = local_batch.reshape((img_dim, img_dim))
+            thresh_index = int(1104 * 1104 * a)
+            sorted_local_batch = np.sort(local_batch, axis=None)
+            if a == 1:
+                threshold = 10000000
+            else:
+                threshold = sorted_local_batch[thresh_index]
+            local_batch[local_batch < threshold] = 0
+            ##plot ablated Hoechst
+            cv2.imwrite("outputs/" + str(rand) + "_b_ablated_Hoechst.tif", ((local_batch / 255) * 65535).astype(np.uint16))
+            ##convert back to tensor
+            local_batch = local_batch.reshape((1, 1, img_dim, img_dim))
+            local_batch = torch.from_numpy(local_batch).float().to(device)
+            ablated_outputs = ablated_model(local_batch)
+            pearson = getPearson(ablated_outputs, local_labels)
+            ##plot ablated prediction of cyclinB1
+            cv2.imwrite("outputs/" + str(rand) + "_e_predicted_ablated_pearson={}.tif".format(pearson), ((ablated_outputs.cpu().numpy().reshape(img_dim, img_dim) / 255) * 65535).astype(np.uint16))
+            i += 1
+            if i >= sample_size:
+                break
+
+
+            # local_batch = local_batch.reshape((1, 1, img_dim, img_dim))
+            # local_batch = torch.from_numpy(local_batch).float().to(device)
+            # local_labels = local_labels.to(device)
+
+
+
+
 
        
 #============================================================================

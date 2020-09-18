@@ -44,12 +44,12 @@ else:
     minMaxStats = "raw_1_thru_6_min_max.npy" #stats for min max values 
     train_params = {'batch_size': 1, 'num_workers': 2} #batch size 32 for tiles, 4 seems ok for full image
     test_params = {'batch_size': 1, 'num_workers': 2} 
-max_epochs = 20
+max_epochs = 30
 learning_rate = .001
 continue_training = False ##if we want to train from a pre-trained model
 if continue_training:
     load_training_name = "LOAD_MODEL_NAME.pt" #model to use if we're training from a pre-trained model
-gpu_list = [0,1] ##gpu ids to use
+gpu_list = [1,0] ##gpu ids to use
 normalize = "scale" #scale for scaling values 0 to 255, or "unit" for subtracting mean and dividing by std 
 lossfn = pearsonCorrLoss 
 architecture = "unet mod"
@@ -93,22 +93,45 @@ validation_generator = data.DataLoader(dataset,sampler=test_sampler, **test_para
 
 #============================================================================
 #============================================================================
-## BRIEF TESTS
-#============================================================================
-#============================================================================
-##make sure train and test are separate and there's zero overlap
-
-
-#============================================================================
-#============================================================================
 ## METHOD CALLS
 #============================================================================
 #============================================================================
-# train(continue_training=False, model=model, max_epochs=max_epochs, training_generator=training_generator, validation_generator=validation_generator, lossfn=lossfn, optimizer=optimizer, plotName="plotName",device=device)
-test(sample_size=100, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=validation_generator, lossfn=lossfn,device=device)
-# testOnSeparatePlates(sample_size=1000, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=validation_generator, lossfn=lossfn, device=device)
+train(continue_training=False, model=model, max_epochs=max_epochs, training_generator=training_generator, validation_generator=validation_generator, lossfn=lossfn, optimizer=optimizer, plotName="null",device=device)
+# test(sample_size=1000000, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=validation_generator, lossfn=lossfn,device=device)
 # getMSE(loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", model=model, validation_generator=validation_generator, device=device)
 # getNull(validation_generator=validation_generator,device=device)
 # getROC(lab_thresh=1.0, sample_size=1000000, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=validation_generator, device=device)
+
+
+##Supplemental analysis
+# testOnSeparatePlates(sample_size=1000, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=validation_generator, lossfn=lossfn, device=device)
 # ablationTestTau(sample_size=1000000, validation_generator=validation_generator, ablate_DAPI_only=False, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt",device=device)
+
+##for supplemental DAPI training analysis 
+dapi_model = Unet_mod(inputChannels=1)
+dapi_model = nn.DataParallel(dapi_model, device_ids=gpu_list).cuda()
+dapi_model = dapi_model.to(device)
+dataset = DAPIDataset(csv_name, DAPIMin, DAPIMax, labelMin, labelMax)
+training_generator = data.DataLoader(dataset, sampler=train_sampler, **train_params)
+validation_generator = data.DataLoader(dataset,sampler=test_sampler, **test_params)
+print(len(training_generator), len(validation_generator))
+train(continue_training=False, model=dapi_model, max_epochs=max_epochs, training_generator=training_generator, validation_generator=validation_generator, lossfn=lossfn, optimizer=optimizer, plotName="DAPI_to_AT8",device=device)
+
+
+
+# ##for supplemental YFP only training analysis 
+# yfp_model = Unet_mod(inputChannels=1)
+# yfp_model = nn.DataParallel(yfp_model, device_ids=gpu_list).cuda()
+# yfp_model = yfp_model.to(device)
+# dataset = YFPDataset(csv_name, inputMin, inputMax, labelMin, labelMax)
+# training_generator = data.DataLoader(dataset, sampler=train_sampler, **train_params)
+# validation_generator = data.DataLoader(dataset,sampler=test_sampler, **test_params)
+# print(len(training_generator), len(validation_generator))
+# train(continue_training=False, model=yfp_model, max_epochs=max_epochs, training_generator=training_generator, validation_generator=validation_generator, lossfn=lossfn, optimizer=optimizer, plotName="YFP_only_to_AT8",device=device)
+
+
+
+
+
+
 

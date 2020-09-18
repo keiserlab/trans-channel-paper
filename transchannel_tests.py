@@ -1,5 +1,6 @@
 """
 Unit tests for correctness of certain key methods and data structures
+The global variable "sample_size" is instantiated below to indicate the number of image examples to test for some of the more computationally and time-intensive methods
 """
 from transchannel import *
 import unittest
@@ -112,8 +113,8 @@ class MainFunctionsTests(unittest.TestCase):
         """
         test the method getROC()
         """
-        ML_x, ML_y, null_YFP_x, null_YFP_y, null_DAPI_x, null_DAPI_y = getROC(lab_thresh=1.0, sample_size=4, model=self.model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=self.validation_generator, device=self.device)
-        print(ML_x, ML_y, null_YFP_x, null_YFP_y, null_DAPI_x, null_DAPI_y)
+        ML_x, ML_y, null_YFP_x, null_YFP_y, null_DAPI_x, null_DAPI_y = getROC(lab_thresh=1.0, sample_size=sample_size, model=self.model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=self.validation_generator, device=self.device)
+        # print(ML_x, ML_y, null_YFP_x, null_YFP_y, null_DAPI_x, null_DAPI_y)
         ## make sure return is in expected, sorted form 
         self.assertTrue(ML_x == sorted(ML_x, reverse=True))
         self.assertTrue(null_YFP_x == sorted(null_YFP_x, reverse=True))
