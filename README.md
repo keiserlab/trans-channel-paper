@@ -28,15 +28,22 @@ All deep learning models were trained using Nvidia Geforce GTX 1080 GPUs
 
 **ExampleFigureGenerator.ipynb** contains example code to reproduce the main performance results for the tau dataset.
 
-**models:**
+**models:**<br />
 This folder contains the fully trained models, including: <br />
-The model we applied to the archival HCS ("raw_1_thru_6_full_Unet_mod_continue_training_2.pt")  <br />
+The model we applied to the archival HCS<br />
+&nbsp;&nbsp;&nbsp;&nbsp;("raw_1_thru_6_full_Unet_mod_continue_training_2.pt")  <br />
 The 3 cross-validation models applied to an expanded dataset with negative controls (see Supplement)  <br />
-&nbsp;&nbsp;&nbsp;&nbsp;tau_cross_validate_fold1.pt, tau_cross_validate_fold2.pt, tau_cross_validate_fold3.pt <br />
+&nbsp;&nbsp;&nbsp;&nbsp;tau_cross_validate_fold1.pt<br />
+&nbsp;&nbsp;&nbsp;&nbsp;tau_cross_validate_fold2.pt<br />
+&nbsp;&nbsp;&nbsp;&nbsp;tau_cross_validate_fold3.pt <br />
 The 3 models trained with threefold cross-validation on the ablated (95th percentile) osteosarcoma dataset  <br />
-&nbsp;&nbsp;&nbsp;&nbsp;d0_to_d1_ablation_cyclin_only_dataset_fold1_continue_training.pt, d0_to_d1_ablation_cyclin_only_dataset_fold2_continue_training.pt, d0_to_d1_ablation_cyclin_only_dataset_fold3_continue_training.pt <br />
-The 3 models trained with threefold cross-validation on the raw, unablated osteosarcoma dataset  <br />
-&nbsp;&nbsp;&nbsp;&nbsp;d0_to_d1_cyclin_only_dataset_fold1.pt, d0_to_d1_cyclin_only_dataset_fold2.pt, d0_to_d1_cyclin_only_dataset_fold3.pt
+&nbsp;&nbsp;&nbsp;&nbsp;d0_to_d1_ablation_cyclin_only_dataset_fold1_continue_training.pt <br />
+&nbsp;&nbsp;&nbsp;&nbsp;d0_to_d1_ablation_cyclin_only_dataset_fold2_continue_training.pt <br />
+&nbsp;&nbsp;&nbsp;&nbsp;d0_to_d1_ablation_cyclin_only_dataset_fold3_continue_training.pt <br />
+The 3 models trained with threefold cross-validation on the raw, unablated osteosarcoma dataset<br />
+&nbsp;&nbsp;&nbsp;&nbsp;d0_to_d1_cyclin_only_dataset_fold1.pt  <br />
+&nbsp;&nbsp;&nbsp;&nbsp;d0_to_d1_cyclin_only_dataset_fold2.pt <br />
+&nbsp;&nbsp;&nbsp;&nbsp;d0_to_d1_cyclin_only_dataset_fold3.pt 
 
 
 
