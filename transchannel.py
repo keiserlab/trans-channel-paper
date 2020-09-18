@@ -112,7 +112,7 @@ class DAPIDataset(Dataset):
         t_img = cv2.imread(t, cv2.IMREAD_UNCHANGED)
         t_img = t_img.astype(np.float32)
         t_img = ((t_img - self.labelMin) / (self.labelMax - self.labelMin)) * 255
-        return x, DAPI_img, t_img
+        return getDAPI(x), DAPI_img, t_img
 
 class YFPDataset(Dataset):
     """

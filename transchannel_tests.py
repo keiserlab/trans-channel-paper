@@ -157,10 +157,37 @@ class DatasetTests(unittest.TestCase):
         i = 0
         ## iterate over a random subset of our data to test 
         for names, local_batch, local_labels in generator:
+            self.assertTrue("FITC" in names[0])
             ## make sure data range is bounded correctly
             self.assertTrue(0 <= torch.max(local_batch) <= 255)
             ## make sure inputs and labels are correctly shaped
             self.assertEqual(tuple(local_batch.shape), (1, 2, 2048, 2048))
+            self.assertEqual(tuple(local_labels.shape), (1, 2048, 2048))
+            i += 1
+            if i > sample_size:
+                break
+
+    def testDAPIDataset(self):
+        """
+        test the DAPI Dataset object used for to train DAPI -> AT8 (supplement)
+        """
+        csv_name = "raw_dataset_1_thru_6_full_images_gpu2.csv"
+        meanSTDStats = "raw_dataset_1_thru_6_stats.npy"
+        minMaxStats = "raw_1_thru_6_min_max.npy" #stats for min max values 
+        stats = np.load(meanSTDStats)
+        inputMean, inputSTD, labelMean, labelSTD, DAPIMean, DAPISTD = stats
+        stats = np.load(minMaxStats)
+        inputMin, inputMax, labelMin, labelMax, DAPIMin, DAPIMax = stats
+        dataset = DAPIDataset(csv_name, DAPIMin, DAPIMax, labelMin, labelMax)
+        generator = data.DataLoader(dataset, sampler = SubsetRandomSampler(list(range(0, len(dataset)))))
+        i = 0
+        ## iterate over a random subset of our data to test 
+        for names, local_batch, local_labels in generator:
+            self.assertTrue("DAPI" in names[0])
+            ## make sure data range is bounded correctly
+            self.assertTrue(0 <= torch.max(local_batch) <= 255)
+            ## make sure inputs and labels are correctly shaped
+            self.assertEqual(tuple(local_batch.shape), (1, 2048, 2048))
             self.assertEqual(tuple(local_labels.shape), (1, 2048, 2048))
             i += 1
             if i > sample_size:

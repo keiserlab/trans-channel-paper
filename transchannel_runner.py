@@ -108,14 +108,14 @@ train(continue_training=False, model=model, max_epochs=max_epochs, training_gene
 # ablationTestTau(sample_size=1000000, validation_generator=validation_generator, ablate_DAPI_only=False, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt",device=device)
 
 ##for supplemental DAPI training analysis 
-dapi_model = Unet_mod(inputChannels=1)
-dapi_model = nn.DataParallel(dapi_model, device_ids=gpu_list).cuda()
-dapi_model = dapi_model.to(device)
-dataset = DAPIDataset(csv_name, DAPIMin, DAPIMax, labelMin, labelMax)
-training_generator = data.DataLoader(dataset, sampler=train_sampler, **train_params)
-validation_generator = data.DataLoader(dataset,sampler=test_sampler, **test_params)
-print(len(training_generator), len(validation_generator))
-train(continue_training=False, model=dapi_model, max_epochs=max_epochs, training_generator=training_generator, validation_generator=validation_generator, lossfn=lossfn, optimizer=optimizer, plotName="DAPI_to_AT8",device=device)
+# dapi_model = Unet_mod(inputChannels=1)
+# dapi_model = nn.DataParallel(dapi_model, device_ids=gpu_list).cuda()
+# dapi_model = dapi_model.to(device)
+# dataset = DAPIDataset(csv_name, DAPIMin, DAPIMax, labelMin, labelMax)
+# training_generator = data.DataLoader(dataset, sampler=train_sampler, **train_params)
+# validation_generator = data.DataLoader(dataset,sampler=test_sampler, **test_params)
+# print(len(training_generator), len(validation_generator))
+# train(continue_training=False, model=dapi_model, max_epochs=max_epochs, training_generator=training_generator, validation_generator=validation_generator, lossfn=lossfn, optimizer=optimizer, plotName="DAPI_to_AT8",device=device)
 
 
 
