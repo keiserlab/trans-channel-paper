@@ -5,8 +5,14 @@ author: Daniel Wong (daniel.wong2@ucsf.edu)
 (put link here when finished)
 
 ## The following python packages are required: 
-torch, torchvision, pandas, cv2, numpy, sklearn, pickle, matplotlib
+torch 1.2.0 <br />
+torchvision 0.4.0 <br />
+pandas 0.24.2 <br />
+cv2 4.1.1.26 <br />
+numpy 1.16.4 <br />
+sklearn 0.21.2 <br />
 
+ 
 ## Hardware Requirements:
 All deep learning models were trained using Nvidia Geforce GTX 1080 GPUs
 
