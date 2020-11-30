@@ -5,6 +5,8 @@ The global variable "sample_size" is instantiated below to indicate the number o
 from transchannel import *
 import unittest
 
+hostname = socket.gethostname() 
+
 class HelperFunctionsTests(unittest.TestCase):
     """
     tests for the helper functions
@@ -18,9 +20,9 @@ class HelperFunctionsTests(unittest.TestCase):
         predicted = torch.tensor(np.array([[1,0,1], [1,1,1], [0,0,0]]))
         self.assertEqual(calculateMSE(actual, predicted),0)
         ## non-matching case with error
-        actual = torch.tensor(np.array([[1,1], [0,0]])) #-> 1,1, -1 -1
-        predicted = torch.tensor(np.array([[0,0],[1,1]]))# -> -1 -1 -1 1 1 1
-        self.assertEqual(calculateMSE(actual, predicted), np.sqrt(16)) #  sqrt(4 + 4 + 4 + 4)
+        actual = torch.tensor(np.array([[1,1], [0,0]])) 
+        predicted = torch.tensor(np.array([[0,0],[1,1]]))
+        self.assertEqual(calculateMSE(actual, predicted), np.sqrt(16)) 
         self.assertNotEqual(4,5)
 
     def testPearsonCorrLoss(self):
@@ -65,16 +67,20 @@ class HelperFunctionsTests(unittest.TestCase):
 
 class MainFunctionsTests(unittest.TestCase):
     """
-    test for the more detailed and sophisticated functions that require loading the ML model
+    test for the more detailed functions that require loading the ML model
     """
-    csv_name = "raw_dataset_1_thru_6_full_images_gpu2.csv"
-    meanSTDStats = "raw_dataset_1_thru_6_stats.npy"
-    minMaxStats = "raw_1_thru_6_min_max.npy" #stats for min max values 
+    csv_name = "csvs/raw_dataset_1_thru_6_full_images_gpu2.csv"
+    meanSTDStats = "stats/raw_dataset_1_thru_6_stats.npy"
+    minMaxStats = "stats/raw_1_thru_6_min_max.npy" #stats for min max values  
+    if "keiser" in hostname:
+        DATA_DIR = "/srv/nas/mk3/users/dwong/" #where the raw images are located
+    else:
+        DATA_DIR = "/data1/wongd/"
     stats = np.load(meanSTDStats)
     inputMean, inputSTD, labelMean, labelSTD, DAPIMean, DAPISTD = stats
     stats = np.load(minMaxStats)
     inputMin, inputMax, labelMin, labelMax, DAPIMin, DAPIMax = stats
-    dataset = ImageDataset(csv_name, inputMin, inputMax, DAPIMin, DAPIMax, labelMin, labelMax)
+    dataset = ImageDataset(csv_name, inputMin, inputMax, DAPIMin, DAPIMax, labelMin, labelMax, DATA_DIR)
     dataset_size = len(dataset)
     indices = list(range(dataset_size))
     split = int(np.floor(.3 * dataset_size)) #30% test 
@@ -114,7 +120,6 @@ class MainFunctionsTests(unittest.TestCase):
         test the method getROC()
         """
         ML_x, ML_y, null_YFP_x, null_YFP_y, null_DAPI_x, null_DAPI_y = getROC(lab_thresh=1.0, sample_size=sample_size, model=self.model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=self.validation_generator, device=self.device)
-        # print(ML_x, ML_y, null_YFP_x, null_YFP_y, null_DAPI_x, null_DAPI_y)
         ## make sure return is in expected, sorted form 
         self.assertTrue(ML_x == sorted(ML_x, reverse=True))
         self.assertTrue(null_YFP_x == sorted(null_YFP_x, reverse=True))
@@ -145,14 +150,18 @@ class DatasetTests(unittest.TestCase):
         """
         test the Dataset object used for the tauopathy training set
         """
-        csv_name = "raw_dataset_1_thru_6_full_images_gpu2.csv"
-        meanSTDStats = "raw_dataset_1_thru_6_stats.npy"
-        minMaxStats = "raw_1_thru_6_min_max.npy" #stats for min max values 
+        csv_name = "csvs/raw_dataset_1_thru_6_full_images_gpu2.csv"
+        meanSTDStats = "stats/raw_dataset_1_thru_6_stats.npy"
+        minMaxStats = "stats/raw_1_thru_6_min_max.npy" #stats for min max values
+        if "keiser" in hostname:
+            DATA_DIR = "/srv/nas/mk3/users/dwong/" #where the raw images are located
+        else:
+            DATA_DIR = "/data1/wongd/"
         stats = np.load(meanSTDStats)
         inputMean, inputSTD, labelMean, labelSTD, DAPIMean, DAPISTD = stats
         stats = np.load(minMaxStats)
         inputMin, inputMax, labelMin, labelMax, DAPIMin, DAPIMax = stats
-        dataset = ImageDataset(csv_name, inputMin, inputMax, DAPIMin, DAPIMax, labelMin, labelMax)
+        dataset = ImageDataset(csv_name, inputMin, inputMax, DAPIMin, DAPIMax, labelMin, labelMax, DATA_DIR)
         generator = data.DataLoader(dataset, sampler = SubsetRandomSampler(list(range(0, len(dataset)))))
         i = 0
         ## iterate over a random subset of our data to test 
@@ -171,14 +180,18 @@ class DatasetTests(unittest.TestCase):
         """
         test the DAPI Dataset object used for to train DAPI -> AT8 (supplement)
         """
-        csv_name = "raw_dataset_1_thru_6_full_images_gpu2.csv"
-        meanSTDStats = "raw_dataset_1_thru_6_stats.npy"
-        minMaxStats = "raw_1_thru_6_min_max.npy" #stats for min max values 
+        csv_name = "csvs/raw_dataset_1_thru_6_full_images_gpu2.csv"
+        meanSTDStats = "stats/raw_dataset_1_thru_6_stats.npy"
+        minMaxStats = "stats/raw_1_thru_6_min_max.npy" #stats for min max values 
+        if "keiser" in hostname:
+            DATA_DIR = "/srv/nas/mk3/users/dwong/" #where the raw images are located
+        else:
+            DATA_DIR = "/data1/wongd/"
         stats = np.load(meanSTDStats)
         inputMean, inputSTD, labelMean, labelSTD, DAPIMean, DAPISTD = stats
         stats = np.load(minMaxStats)
         inputMin, inputMax, labelMin, labelMax, DAPIMin, DAPIMax = stats
-        dataset = DAPIDataset(csv_name, DAPIMin, DAPIMax, labelMin, labelMax)
+        dataset = DAPIDataset(csv_name, DATA_DIR)
         generator = data.DataLoader(dataset, sampler = SubsetRandomSampler(list(range(0, len(dataset)))))
         i = 0
         ## iterate over a random subset of our data to test 
@@ -187,7 +200,7 @@ class DatasetTests(unittest.TestCase):
             ## make sure data range is bounded correctly
             self.assertTrue(0 <= torch.max(local_batch) <= 255)
             ## make sure inputs and labels are correctly shaped
-            self.assertEqual(tuple(local_batch.shape), (1, 2048, 2048))
+            self.assertEqual(tuple(local_batch.shape), (1, 1, 2048, 2048))
             self.assertEqual(tuple(local_labels.shape), (1, 2048, 2048))
             i += 1
             if i > sample_size:
@@ -197,8 +210,12 @@ class DatasetTests(unittest.TestCase):
         """
         test the Dataset used for the osteosarcoma dataset
         """
-        csvName = "/home/wongd/phenoScreen/datasets/cyclin_dataset.csv"
-        dataset = OsteosarcomaDataset(csvName)
+        if "keiser" in hostname:
+            DATA_DIR = "/srv/nas/mk1/users/dwong/" #where the raw images are located
+        else:
+            DATA_DIR = "/data1/wongd/tifs/"
+        csvName = "csvs/cyclin_dataset.csv"
+        dataset = OsteosarcomaDataset(csvName, DATA_DIR)
         generator = data.DataLoader(dataset, sampler = SubsetRandomSampler(list(range(0, len(dataset)))))
         i = 0
         ## iterate over a random subset of our data to test 
@@ -216,8 +233,12 @@ class DatasetTests(unittest.TestCase):
         """
         test the Dataset used for training the ablated osteosarcoma model
         """
-        csvName = "/home/wongd/phenoScreen/datasets/cyclin_dataset.csv"
-        dataset = OsteosarcomaAblationDataset(csvName, thresh_percent=1.0) #full ablation dataset - all channel 0 input pixels should be fully ablated and set to 0 value
+        csvName = "csvs/cyclin_dataset.csv"
+        if "keiser" in hostname:
+            DATA_DIR = "/srv/nas/mk1/users/dwong/" #where the raw images are located
+        else:
+            DATA_DIR = "/data1/wongd/tifs/"
+        dataset = OsteosarcomaAblationDataset(csvName, DATA_DIR, thresh_percent=1.0) #full ablation dataset - all channel 0 input pixels should be fully ablated and set to 0 value
         generator = data.DataLoader(dataset, sampler = SubsetRandomSampler(list(range(0, len(dataset)))))
         i = 0
         ## iterate over a random subset of our data to test 

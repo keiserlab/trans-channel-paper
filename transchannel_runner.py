@@ -1,21 +1,25 @@
 """
-Script to run and call transchannel.py,
+Script for runing code pertinent to the tauopathy study,
 This script can be run with the command "python transchannel_runner.py {FOLD NUMBER}". 
-We used a 3-fold cross-validation scheme over an extended dataset for the supplemental analysis (specify this by setting FOLD NUMBER to either 1,2, or 3).
-For the main paper analyses, we performed a 70% train, 30% test split presented. To specify this setup, give an integer argument that is not in [1,2,3] for FOLD NUMBER. 
+If you wish to perform a 3-fold cross-validation scheme instead of the 70% train 30% test split used in this study, you can specify FOLD NUMBER = 1,2, or 3 
+To specify the main analyses presented in this study, give an integer argument that is not in [1,2,3] for FOLD NUMBER. 
 consists of two sections
 1) global variables and parameters 
 2) method calls to run specific parts of the code
-
 """
 #============================================================================
 #============================================================================
 ## VARIABLES AND PARAMETERS
 #============================================================================
 #============================================================================
+
 from transchannel import *
 
 hostname = socket.gethostname() 
+if "keiser" in hostname:
+    DATA_DIR = "/srv/nas/mk3/users/dwong/" #where the raw images are located
+else:
+    DATA_DIR = "/data1/wongd/"
 if torch.cuda.device_count() > 1:
   print("# available GPUs", torch.cuda.device_count(), "GPUs!")
 use_cuda = torch.cuda.is_available()
@@ -26,31 +30,18 @@ if fold in [1,2,3]:
 else:
     cross_val = False
 plotName = "MODEL_NAME".format(fold) #name used to save model 
-if "keiserlab" in hostname: ##if on keiser lab server, else butte lab server 
-    if cross_val:
-        csv_name = "/srv/home/dwong/AIInCell/datasets/butte_server_raw_plates_1_thru_16.csv"
-    else:
-        csv_name = "/srv/home/dwong/AIInCell/datasets/raw_dataset_1_thru_6_full_images_gpu2.csv" #plates 1 through 6 on gpu2's fast drive, used to train model for historical validation 
-    meanSTDStats = "/srv/home/dwong/AIInCell/models/raw_dataset_1_thru_6_stats.npy"
-    minMaxStats = "/srv/home/dwong/AIInCell/models/raw_1_thru_6_min_max.npy" #stats for min max values 
-    train_params = {'batch_size': 1, 'num_workers': 6} #batch size 32 for tiles, 4 seems ok for full image
-    test_params = {'batch_size': 1, 'num_workers': 6} 
-else:
-    if cross_val:
-        csv_name = "butte_server_raw_plates_1_thru_16.csv"
-    else:
-        csv_name = "raw_dataset_1_thru_6_full_images_gpu2.csv"
-    meanSTDStats = "raw_dataset_1_thru_6_stats.npy"
-    minMaxStats = "raw_1_thru_6_min_max.npy" #stats for min max values 
-    train_params = {'batch_size': 1, 'num_workers': 2} #batch size 32 for tiles, 4 seems ok for full image
-    test_params = {'batch_size': 1, 'num_workers': 2} 
+csv_name = "csvs/raw_dataset_1_thru_6_full_images_gpu2.csv" 
+meanSTDStats = "stats/raw_dataset_1_thru_6_stats.npy"
+minMaxStats = "stats/raw_1_thru_6_min_max.npy" #stats for min max values 
+train_params = {'batch_size': 1, 'num_workers': 6} 
+test_params = {'batch_size': 1, 'num_workers': 6} 
 max_epochs = 30
 learning_rate = .001
-continue_training = False ##if we want to train from a pre-trained model
+continue_training = False ##if we want to continue training from a pre-trained model
 if continue_training:
     load_training_name = "LOAD_MODEL_NAME.pt" #model to use if we're training from a pre-trained model
-gpu_list = [1,0] ##gpu ids to use
-normalize = "scale" #scale for scaling values 0 to 255, or "unit" for subtracting mean and dividing by std 
+gpu_list = [0,1] ##gpu ids to use
+print("GPUs to use: ", gpu_list)
 lossfn = pearsonCorrLoss 
 architecture = "unet mod"
 device = torch.device("cuda:" + str(gpu_list[0]) if use_cuda else "cpu")
@@ -65,7 +56,7 @@ if len(gpu_list) > 1:
 model = model.to(device)
 optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=.9)
 ## Random seed for data split 
-dataset = ImageDataset(csv_name, inputMin, inputMax, DAPIMin, DAPIMax, labelMin, labelMax)
+dataset = ImageDataset(csv_name, inputMin, inputMax, DAPIMin, DAPIMax, labelMin, labelMax, DATA_DIR)
 dataset_size = len(dataset)
 indices = list(range(dataset_size))
 split = int(np.floor(.3 * dataset_size)) #30% test 
@@ -89,49 +80,58 @@ else: #if we're specifying a 70% train, 30% test split
     test_sampler = SubsetRandomSampler(test_indices) #radom indices 
 training_generator = data.DataLoader(dataset, sampler=train_sampler, **train_params)
 validation_generator = data.DataLoader(dataset,sampler=test_sampler, **test_params)
-
+full_data_sampler = SubsetRandomSampler(indices) 
+full_data_generator = data.DataLoader(dataset, sampler=full_data_sampler, **train_params)
 
 #============================================================================
 #============================================================================
 ## METHOD CALLS
 #============================================================================
 #============================================================================
-train(continue_training=False, model=model, max_epochs=max_epochs, training_generator=training_generator, validation_generator=validation_generator, lossfn=lossfn, optimizer=optimizer, plotName="null",device=device)
-# test(sample_size=1000000, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=validation_generator, lossfn=lossfn,device=device)
-# getMSE(loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", model=model, validation_generator=validation_generator, device=device)
-# getNull(validation_generator=validation_generator,device=device)
-# getROC(lab_thresh=1.0, sample_size=1000000, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=validation_generator, device=device)
 
+##clear outputs directory first
+shutil.rmtree("outputs/")
+os.mkdir("outputs/")
+
+train(continue_training=False, model=model, max_epochs=max_epochs, training_generator=training_generator, validation_generator=validation_generator, lossfn=lossfn, optimizer=optimizer, plotName="null",device=device)
+ml_model_perf, null_model_perf, ml_model_mse_perf, null_model_mse_perf = test(sample_size=1000000, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=validation_generator, lossfn=lossfn,device=device)
+pickle.dump(ml_model_perf, open("pickles/ml_model_perf.pkl", "wb"))
+pickle.dump(null_model_perf, open("pickles/null_model_perf.pkl", "wb"))
+pickle.dump(ml_model_mse_perf, open("pickles/ml_model_mse_perf.pkl", "wb"))
+pickle.dump(null_model_mse_perf, open("pickles/null_model_mse_perf.pkl", "wb"))
+ML_x, ML_y, null_YFP_x, null_YFP_y, null_DAPI_x, null_DAPI_y = getROC(lab_thresh=1.0, sample_size=1000000, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=validation_generator, device=device)
 
 ##Supplemental analysis
-# testOnSeparatePlates(sample_size=1000, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=validation_generator, lossfn=lossfn, device=device)
-# ablationTestTau(sample_size=1000000, validation_generator=validation_generator, ablate_DAPI_only=False, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt",device=device)
+getOverlap(sample_size=1000000, generator=full_data_generator)
+testOnSeparatePlates(sample_size=1000000, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=validation_generator, lossfn=lossfn, device=device)
+ablationTestTau(sample_size=1000000, validation_generator=validation_generator, ablate_DAPI_only=False, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt",device=device)
 
 ##for supplemental DAPI training analysis 
-# dapi_model = Unet_mod(inputChannels=1)
-# dapi_model = nn.DataParallel(dapi_model, device_ids=gpu_list).cuda()
-# dapi_model = dapi_model.to(device)
-# dataset = DAPIDataset(csv_name, DAPIMin, DAPIMax, labelMin, labelMax)
-# training_generator = data.DataLoader(dataset, sampler=train_sampler, **train_params)
-# validation_generator = data.DataLoader(dataset,sampler=test_sampler, **test_params)
-# print(len(training_generator), len(validation_generator))
-# train(continue_training=False, model=dapi_model, max_epochs=max_epochs, training_generator=training_generator, validation_generator=validation_generator, lossfn=lossfn, optimizer=optimizer, plotName="DAPI_to_AT8",device=device)
+dapi_model = Unet_mod(inputChannels=1)
+dapi_model = nn.DataParallel(dapi_model, device_ids=gpu_list).cuda()
+dapi_model = dapi_model.to(device)
+dataset = DAPIDataset(csv_name, DATA_DIR)
+training_generator = data.DataLoader(dataset, sampler=train_sampler, **train_params)
+validation_generator = data.DataLoader(dataset,sampler=test_sampler, **test_params)
+train(continue_training=False, model=dapi_model, max_epochs=max_epochs, training_generator=training_generator, validation_generator=validation_generator, lossfn=lossfn, optimizer=optimizer, plotName="null",device=device)
+ml_model_perf, null_model_perf, ml_model_mse_perf, null_model_mse_perf = test(sample_size=1000000, model=dapi_model, loadName="models/DAPI_to_AT8.pt", validation_generator=validation_generator, lossfn=lossfn,device=device)
+pickle.dump(ml_model_perf, open("pickles/single_channel_DAPI_ml_model_perf.pkl", "wb"))
+pickle.dump(null_model_perf, open("pickles/single_channel_DAPI_null_model_perf.pkl", "wb"))
+pickle.dump(ml_model_mse_perf, open("pickles/single_channel_DAPI_ml_model_mse_perf.pkl", "wb"))
+pickle.dump(null_model_mse_perf, open("pickles/single_channel_DAPI_null_model_mse_perf.pkl", "wb"))
 
-
-
-# ##for supplemental YFP only training analysis 
-# yfp_model = Unet_mod(inputChannels=1)
-# yfp_model = nn.DataParallel(yfp_model, device_ids=gpu_list).cuda()
-# yfp_model = yfp_model.to(device)
-# dataset = YFPDataset(csv_name, inputMin, inputMax, labelMin, labelMax)
-# training_generator = data.DataLoader(dataset, sampler=train_sampler, **train_params)
-# validation_generator = data.DataLoader(dataset,sampler=test_sampler, **test_params)
-# print(len(training_generator), len(validation_generator))
-# train(continue_training=False, model=yfp_model, max_epochs=max_epochs, training_generator=training_generator, validation_generator=validation_generator, lossfn=lossfn, optimizer=optimizer, plotName="YFP_only_to_AT8",device=device)
-
-
-
-
-
+##for supplemental YFP only training analysis 
+yfp_model = Unet_mod(inputChannels=1)
+yfp_model = nn.DataParallel(yfp_model, device_ids=gpu_list).cuda()
+yfp_model = yfp_model.to(device)
+dataset = YFPDataset(csv_name, DATA_DIR)
+training_generator = data.DataLoader(dataset, sampler=train_sampler, **train_params)
+validation_generator = data.DataLoader(dataset,sampler=test_sampler, **test_params)
+train(continue_training=False, model=yfp_model, max_epochs=max_epochs, training_generator=training_generator, validation_generator=validation_generator, lossfn=lossfn, optimizer=optimizer, plotName="null",device=device)
+ml_model_perf, null_model_perf, ml_model_mse_perf, null_model_mse_perf = test(sample_size=1000000, model=yfp_model, loadName="models/YFP_only_to_AT8.pt", validation_generator=validation_generator, lossfn=lossfn,device=device)
+pickle.dump(ml_model_perf, open("pickles/single_channel_YFP_ml_model_perf.pkl", "wb"))
+pickle.dump(null_model_perf, open("pickles/single_channel_YFP_null_model_perf.pkl", "wb"))
+pickle.dump(ml_model_mse_perf, open("pickles/single_channel_YFP_ml_model_mse_perf.pkl", "wb"))
+pickle.dump(null_model_mse_perf, open("pickles/single_channel_YFP_null_model_mse_perf.pkl", "wb"))
 
 
