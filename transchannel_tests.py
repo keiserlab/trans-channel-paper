@@ -254,5 +254,5 @@ class DatasetTests(unittest.TestCase):
             if i > sample_size:
                 break
 
-sample_size = 10
+sample_size = 1000000
 unittest.main()
