@@ -37,7 +37,6 @@ def performanceBarCharts():
     ml_model_perf = pickle.load(open("pickles/ml_model_perf.pkl", "rb"))
     null_model_perf = pickle.load(open("pickles/null_model_perf.pkl", "rb"))
     null_dapi_perf = pickle.load(open("pickles/single_channel_DAPI_null_model_perf.pkl", "rb"))
-    print("XXXX", ml_model_perf)
     y= np.array([ml_model_perf[0], null_model_perf[0], null_dapi_perf[0]]).round(decimals=2)
     stds = [ml_model_perf[1], null_model_perf[1], null_dapi_perf[1]]
     x = [1, 2, 3]
@@ -227,7 +226,6 @@ def performanceBarCharts():
     ax.xaxis.set_major_locator(plt.MaxNLocator(2))
     plt.savefig("matplotlib_figures/supplemental_single_channel_learning_pearson_similarity_input_and_predicted.png", dpi=300)
 
-
 def calculateZScoreAndPValue(m1, s1, n1, m2, s2, n2):
     """
     given stats for two populations 1 and 2, m1 = mean 1, m2 = mean 2, s1 = std of 1, s2 = std of 2, and n1 = sample size of 1, n2 = sample size of 2
@@ -364,9 +362,11 @@ def plateSeparatedPerformance():
     plt.savefig("matplotlib_figures/separatedPlatesPerformance.png", dpi=300)
 
 def enrichmentPlot(labelScheme):
+    """
+    for generating the enrichment curves (Figure 5, and Supplemental Figure 6)
+    """
     fig, ax = plt.subplots()
     x1 = range(0, 1600)
-    #strict labeling
     if labelScheme == "Strict Labeling Successful Compounds":
         plt.title("Enrichment Plot for Triaging Active Compounds", fontname="Times New Roman", fontsize=14)
         historic_hits = pickle.load(open("pickles/historic_hits_conventional_standard.pkl", "rb"))
@@ -408,7 +408,6 @@ def enrichmentPlot(labelScheme):
             cumulative_summation += ML_fraction
         ML_plot.append(cumulative_summation)
     x1 = np.arange(0, 1, float(1/1600))
-    print(len(x1), len(historic_plot))
     hist_AUC = np.trapz(historic_plot, x1)
     print("HIST AUC: ", hist_AUC)
     ML_AUC = np.trapz(ML_plot, x1)
@@ -427,6 +426,9 @@ def enrichmentPlot(labelScheme):
 
 
 def enrichmentBoxPlot(labelScheme):
+    """
+    generates boxplots for the enrichment analysis (Figure 5 and Supplemental Figure 6)
+    """
     fig, ax = plt.subplots()
     x1 = range(0, 1600)
     if labelScheme == "Strict Labeling Successful Compounds":
@@ -482,7 +484,6 @@ def enrichmentBoxPlot(labelScheme):
     plt.gcf().subplots_adjust(left=.22) #default: left = 0.125, right = 0.9, bottom = 0.1, top = 0.9
     plt.savefig("matplotlib_figures/box_plot_enrichment_{}.png".format(labelScheme), dpi=300)
 
-
 def ablationPlot():
     """
     for the Supplemental figure analyzing the tuaopathy model performance on progressively ablated images over the test set
@@ -496,7 +497,6 @@ def ablationPlot():
     x = [val * 100 for val in x]
     x_vals = ax.get_xticks()
     x_vals = np.insert(x_vals, 0, 0)
-    print(x_vals)
     ax.set_xticklabels(['{:,.0%}'.format(x_val) for x_val in x_vals], fontname="Times New Roman")
     ax.axhline(.53, linestyle="--", color='black', lw=.80, alpha=0.8)
     ax.errorbar(x, averages, yerr=stds, capsize=1.5, elinewidth=.2, ecolor="black", label="ML Model")
@@ -524,7 +524,6 @@ def ROC_plot():
     ML_auc = -1 * np.trapz(y_ML_hist, x_ML_hist)
     null_auc = -1 * np.trapz(y_null_hist, x_null_hist)
     null_DAPI_auc = -1 * np.trapz(y_null_DAPI_hist, x_null_DAPI_hist)
-    print(ML_auc, null_auc)
     ax.plot(x_ML_hist,y_ML_hist,linewidth=2.0, color=colors["ML"], label="ML Model, AUC = {}".format(str(round(ML_auc, 2))[0:4])) #rounded AUC
     ax.plot(x_null_hist,y_null_hist,linewidth=2.0, color=colors["YFP"], label="Null YFP Model, AUC = {}".format(str(round(null_auc, 2))[0:4]))
     ax.plot(x_null_DAPI_hist,y_null_DAPI_hist,linewidth=2.0, color=colors["DAPI"], label="Null DAPI Model, AUC = {}".format(str(round(null_DAPI_auc, 2))[0:4]))
@@ -539,7 +538,6 @@ def ROC_plot():
     plt.xticks(fontname="Times New Roman", fontsize=12)
     plt.yticks(fontname="Times New Roman", fontsize=12)
     plt.savefig("matplotlib_figures/ROC.png", dpi=300)
-
 
 def overlapPlot():
     """
@@ -559,7 +557,6 @@ def overlapPlot():
     for tick in ax.get_xticklabels():
         tick.set_fontname("Times New Roman")
     plt.xticks(np.arange(min(x), max(x) + .25, .25))
-
     plt.savefig("matplotlib_figures/overlapPlot.png", dpi=300)
 
 ## method calls 
