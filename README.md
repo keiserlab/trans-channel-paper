@@ -42,7 +42,7 @@ The 3 models trained with threefold cross-validation on the raw, unablated osteo
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;d0_to_d1_cyclin_only_dataset_fold1.pt  <br />
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;d0_to_d1_cyclin_only_dataset_fold2.pt <br />
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;d0_to_d1_cyclin_only_dataset_fold3.pt <br />
-The two single channel models (i.e. one channel input to one channel output) for the supplemental analysis of the tauopathy study <br />
+The two single channel models (i.e. one channel input to one channel output) for the supplemental tauopathy analysis<br />
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;DAPI_only_to_AT8.pt<br />
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;YFP_only_to_AT8.pt<br />
 
