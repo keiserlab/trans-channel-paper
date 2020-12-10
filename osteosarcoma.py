@@ -1,13 +1,8 @@
 """
-Script to train and evaluate models on the independent dataset of the genome-wide functional screen in osteosarcoma cells 
-
-This script is divided into three parts:
-1) class and method definitions
-2) global variables
-3) method calls to run specific parts of the code
-
-Any questions should be directed to daniel.wong2@ucsf.edu. Thank you!
-
+Script to train and evaluate models on the independent dataset of the genome-wide functional screen in U2OS osteosarcoma cells 
+This script is divided into two parts:
+1) global variables
+2) method calls to run specific parts of the code
 """
 from transchannel import *
 

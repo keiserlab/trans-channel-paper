@@ -1,10 +1,9 @@
 """
 This is the core of the necessary code to reproduce the main training and model evaluation results from the tauopathy dataset and the osteosarcoma dataset
-This script is divided into five parts:
+This script is divided into three parts:
 1) class and method definitions for main results
 2) helper functions
 3) supplemental code
-Any questions should be directed to wongdanr@gmail.com. Thank you!
 """
 import torch 
 import torch.nn as nn
@@ -369,7 +368,6 @@ def test(sample_size=1000000, model=None, loadName=None, validation_generator=No
             running_loss += loss 
             pearson = getPearson(outputs, local_labels)
             performance.append(pearson) 
-            # print(pearson)
             mse_performance.append(calculateMSE(outputs, local_labels))
             null_performance.append(getPearson(local_batch[:, 0, :, :], local_labels))
             null_mse_performance.append(calculateMSE(local_batch[:, 0, :, :], local_labels))

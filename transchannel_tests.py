@@ -1,5 +1,5 @@
 """
-Unit tests for correctness of certain key methods and data structures
+Unit tests for certain key methods and data structures
 The global variable "sample_size" is instantiated below to indicate the number of image examples to test for some of the more computationally and time-intensive methods
 """
 from transchannel import *

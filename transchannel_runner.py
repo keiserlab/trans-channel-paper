@@ -3,7 +3,7 @@ Script for runing code pertinent to the tauopathy study,
 This script can be run with the command "python transchannel_runner.py {FOLD NUMBER}". 
 If you wish to perform a 3-fold cross-validation scheme instead of the 70% train 30% test split used in this study, you can specify FOLD NUMBER = 1,2, or 3 
 To specify the main analyses presented in this study, give an integer argument that is not in [1,2,3] for FOLD NUMBER. 
-consists of two sections
+The script consists of two sections
 1) global variables and parameters 
 2) method calls to run specific parts of the code
 """
@@ -114,7 +114,7 @@ dataset = DAPIDataset(csv_name, DATA_DIR)
 training_generator = data.DataLoader(dataset, sampler=train_sampler, **train_params)
 validation_generator = data.DataLoader(dataset,sampler=test_sampler, **test_params)
 train(continue_training=False, model=dapi_model, max_epochs=max_epochs, training_generator=training_generator, validation_generator=validation_generator, lossfn=lossfn, optimizer=optimizer, plotName="null",device=device)
-ml_model_perf, null_model_perf, ml_model_mse_perf, null_model_mse_perf = test(sample_size=1000000, model=dapi_model, loadName="models/DAPI_to_AT8.pt", validation_generator=validation_generator, lossfn=lossfn,device=device)
+ml_model_perf, null_model_perf, ml_model_mse_perf, null_model_mse_perf = test(sample_size=1000000, model=dapi_model, loadName="models/DAPI_only_to_AT8.pt", validation_generator=validation_generator, lossfn=lossfn,device=device)
 pickle.dump(ml_model_perf, open("pickles/single_channel_DAPI_ml_model_perf.pkl", "wb"))
 pickle.dump(null_model_perf, open("pickles/single_channel_DAPI_null_model_perf.pkl", "wb"))
 pickle.dump(ml_model_mse_perf, open("pickles/single_channel_DAPI_ml_model_mse_perf.pkl", "wb"))

@@ -41,19 +41,22 @@ The 3 models trained with threefold cross-validation on the ablated (95th percen
 The 3 models trained with threefold cross-validation on the raw, unablated osteosarcoma dataset<br />
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;d0_to_d1_cyclin_only_dataset_fold1.pt  <br />
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;d0_to_d1_cyclin_only_dataset_fold2.pt <br />
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;d0_to_d1_cyclin_only_dataset_fold3.pt 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;d0_to_d1_cyclin_only_dataset_fold3.pt <br />
+The two single channel models (i.e. one channel input to one channel output) for the supplemental analysis of the tauopathy study <br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;DAPI_only_to_AT8.pt<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;YFP_only_to_AT8.pt<br />
 
 **csvs:**<br />
-This folder contains the CSVs with matching string pointers to the image dataset <br />
+This folder contains the CSVs with matching string pointers for the image datasets <br />
 
 **stats:**<br />
 This folder contains .npy files with stats used for normalization <br />
 
 **pickles:**<br />
-This folder is the output folder used for saving results as pickles <br />
+This folder is used for saving different results as pickles <br />
 
 **matplotlib_figures:**<br />
-This folder is the output folder where figure_generator.py saves its files <br />
+This folder is where figure_generator.py saves its files <br />
 
 **outputs:**<br />
 This folder is a temporary directory used for saving images <br />
