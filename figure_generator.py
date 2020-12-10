@@ -364,59 +364,57 @@ def plateSeparatedPerformance():
     plt.savefig("matplotlib_figures/separatedPlatesPerformance.png", dpi=300)
 
 def enrichmentPlot(labelScheme):
-    """
-    for generating the various enrichment plots for the prospective drug-activity validation studies
-    """ 
     fig, ax = plt.subplots()
-    x1 = range(0, 1921)
+    x1 = range(0, 1600)
+    #strict labeling
     if labelScheme == "Strict Labeling Successful Compounds":
         plt.title("Enrichment Plot for Triaging Active Compounds", fontname="Times New Roman", fontsize=14)
-        historic_hits = [2,3,4,5,7,8,9,15,18,34,36,38,1915,613,598,591,638]
-        ML_hits = [1,10,11,14,15,18,19,22,27,39,40,302,103,246,140,867,350]
+        historic_hits = pickle.load(open("pickles/historic_hits_conventional_standard.pkl", "rb"))
+        ML_hits = pickle.load(open("pickles/ML_hits_conventional_standard.pkl", "rb"))
         historic_fraction = float(1/len(historic_hits))
         ML_fraction = float(1/len(ML_hits))
-
     if labelScheme == "Strict Labeling Missed Successful Compounds":
         plt.title("Enrichment Plot for Triaging Active Compounds\nwith Rank Greater than 40", fontname="Times New Roman", fontsize=14)
-        historic_hits = [1915,613,591,598,638]
-        ML_hits = [302,103,246,140,867,350]
+        historic_hits = pickle.load(open("pickles/historic_hits_conventional_standard.pkl", "rb"))
+        historic_hits = [x for x in historic_hits if x > 40]
+        ML_hits = pickle.load(open("pickles/ML_hits_conventional_standard.pkl", "rb"))
+        ML_hits = [x for x in ML_hits if x > 40]
         historic_fraction = float(1/len(historic_hits))
         ML_fraction = float(1/len(ML_hits))
-
     if labelScheme == "Strict Labeling Successful Compounds - ML":
         plt.title("Enrichment Plot for Triaging Active Compounds (by ML Standard)", fontname="Times New Roman", fontsize=14)
-        historic_hits = [2,3,4,8,34,36,38,1830,1391,598]
-        ML_hits = [1,4,8,10,11,22,302,140,867,350]
+        historic_hits = pickle.load(open("pickles/historic_hits_ML_standard.pkl", "rb"))
+        ML_hits = pickle.load(open("pickles/ML_hits_ML_standard.pkl", "rb"))
         historic_fraction = float(1/len(historic_hits))
         ML_fraction = float(1/len(ML_hits))
-
     if labelScheme == "Strict Labeling Missed Successful Compounds - ML":
         plt.title("Enrichment Plot for Triaging Active Compounds\nwith Rank Greater than 40 (by ML Standard)", fontname="Times New Roman", fontsize=14)
-        historic_hits = [1830,1391,598]
-        ML_hits = [302,140,867,350]
+        historic_hits = pickle.load(open("pickles/historic_hits_ML_standard.pkl", "rb"))
+        historic_hits = [x for x in historic_hits if x > 40]
+        ML_hits = pickle.load(open("pickles/ML_hits_ML_standard.pkl", "rb"))
+        ML_hits = [x for x in ML_hits if x > 40]
         historic_fraction = float(1/len(historic_hits))
         ML_fraction = float(1/len(ML_hits))
-    
     cumulative_summation = 0
     historic_plot = []
-    for i in range(0, 1921):
+    for i in range(0, 1600):
         if i in historic_hits:
             cumulative_summation += historic_fraction
         historic_plot.append(cumulative_summation)
     cumulative_summation = 0
     ML_plot = []
-    for j in range(0, 1921):
+    for j in range(0, 1600):
         if j in ML_hits:
             cumulative_summation += ML_fraction
-        ML_plot.append(cumulative_summation)  
-    x1 = np.arange(0, 1, float(1/1921))
+        ML_plot.append(cumulative_summation)
+    x1 = np.arange(0, 1, float(1/1600))
     print(len(x1), len(historic_plot))
     hist_AUC = np.trapz(historic_plot, x1)
     print("HIST AUC: ", hist_AUC)
     ML_AUC = np.trapz(ML_plot, x1)
     print("ML AUC: ", ML_AUC)
-    ax.plot(x1, ML_plot, color = "red", label="ML Method, AUC = " + str(ML_AUC)[0:4])
-    ax.plot(x1, historic_plot, color = "blue", label="Conventional Method, AUC = " + str(hist_AUC)[0:4])
+    ax.plot(x1, ML_plot, color = "red", label="ML Method, AUC = " + str(round(ML_AUC, 2)))
+    ax.plot(x1, historic_plot, color = "blue", label="Conventional Method, AUC = " + str(round(hist_AUC, 2)))
     ax.set_xlabel("Ranked Queue Percentage", fontname="Times New Roman", fontsize=12)
     ax.set_ylabel("Percentage of Successful Compounds Discovered", fontname="Times New Roman", fontsize=12)
     plt.legend(loc='lower right', prop={"family":"Times New Roman", "size":10})
@@ -427,46 +425,44 @@ def enrichmentPlot(labelScheme):
     ax.set_xticklabels(['{:,.0%}'.format(x) for x in vals], fontname="Times New Roman", fontsize=12)
     plt.savefig("matplotlib_figures/enrichmentPlot_{}.png".format(labelScheme), dpi=300)
 
+
 def enrichmentBoxPlot(labelScheme):
-    """
-    for generating the corresponding box plots that go with the enrichment curves
-    """
     fig, ax = plt.subplots()
-    x1 = range(0, 1921)
+    x1 = range(0, 1600)
     if labelScheme == "Strict Labeling Successful Compounds":
         plt.title("Box Plot for Triaging Active Compounds", fontname="Times New Roman", fontsize=13)
-        historic_hits = [2,3,4,5,7,8,9,15,18,34,36,38,1915,613,598,591,638]
-        ML_hits = [1,10,11,14,15,18,19,22,27,39,40,302,103,246,140,867,350]
-        hist_text_height =  1000
-        ml_text_height = 500 
-        x_coord = 1
+        historic_hits = pickle.load(open("pickles/historic_hits_conventional_standard.pkl", "rb"))
+        ML_hits = pickle.load(open("pickles/ML_hits_conventional_standard.pkl", "rb"))
+        hist_text_height = 650
+        ml_text_height = 400
     if labelScheme == "Strict Labeling Missed Successful Compounds":
         plt.title("Box Plot for Triaging Active Compounds\nwith Rank Greater than 40", fontname="Times New Roman", fontsize=13)
-        historic_hits = [1915,638,613,598,591]
-        ML_hits = [302,103,246,140,867,350]
-        hist_text_height =  1000
-        ml_text_height = 500 
-        x_coord = 1
+        historic_hits = pickle.load(open("pickles/historic_hits_conventional_standard.pkl", "rb"))
+        historic_hits = [x for x in historic_hits if x > 40]
+        ML_hits = pickle.load(open("pickles/ML_hits_conventional_standard.pkl", "rb"))
+        ML_hits = [x for x in ML_hits if x > 40]
+        hist_text_height =  650
+        ml_text_height = 400 
     if labelScheme == "Strict Labeling Successful Compounds - ML":
         plt.title("Box Plot for Triaging Active Compounds (by ML Standard)", fontname="Times New Roman", fontsize=13)
-        historic_hits = [2,3,4,8,34,36,38,1830,1391,598]
-        ML_hits = [1,4,8,10,11,22,302,140,867,350]
-        hist_text_height =  1000
-        ml_text_height = 500 
-        x_coord = 1
+        historic_hits = pickle.load(open("pickles/historic_hits_ML_standard.pkl", "rb"))
+        ML_hits = pickle.load(open("pickles/ML_hits_ML_standard.pkl", "rb"))
+        hist_text_height =  550
+        ml_text_height = 320 
     if labelScheme == "Strict Labeling Missed Successful Compounds - ML":
         plt.title("Box Plot for Triaging Active Compounds\nwith Rank Greater than 40 (by ML Standard)",  fontname="Times New Roman", fontsize=13)
-        historic_hits = [1830,1391,598]
-        ML_hits = [302,140,867,350]
-        hist_text_height =  1273
+        historic_hits = pickle.load(open("pickles/historic_hits_ML_standard.pkl", "rb"))
+        historic_hits = [x for x in historic_hits if x > 40]
+        ML_hits = pickle.load(open("pickles/ML_hits_ML_standard.pkl", "rb"))
+        ML_hits = [x for x in ML_hits if x > 40]
+        hist_text_height =  1520
         ml_text_height = 500 
-        x_coord = 1.51
     hist_avg, hist_sample_size, hist_Q3 = np.mean(historic_hits), len(historic_hits), np.quantile(historic_hits, .75)
     ml_avg, ml_sample_size, ml_Q3 =  np.mean(ML_hits), len(ML_hits), np.quantile(ML_hits, .75)
     ax.boxplot([historic_hits, ML_hits],  widths=(.45, .45))
     ##data labels
     ax.annotate("average rank = {:.0f}\nsample size = {}".format(hist_avg, hist_sample_size),
-        xy=(x_coord, hist_text_height), xytext=(0, 3),  # 3 points vertical offset
+        xy=(1, hist_text_height), xytext=(0, 3),  # 3 points vertical offset
         textcoords="offset points",
         ha='center', va='bottom', fontname="Times New Roman", fontsize=10)
     ax.annotate("average rank = {:.0f}\nsample size = {}".format(ml_avg, ml_sample_size),
@@ -486,6 +482,7 @@ def enrichmentBoxPlot(labelScheme):
     plt.gcf().subplots_adjust(left=.22) #default: left = 0.125, right = 0.9, bottom = 0.1, top = 0.9
     plt.savefig("matplotlib_figures/box_plot_enrichment_{}.png".format(labelScheme), dpi=300)
 
+
 def ablationPlot():
     """
     for the Supplemental figure analyzing the tuaopathy model performance on progressively ablated images over the test set
@@ -497,6 +494,10 @@ def ablationPlot():
     stds = pickle.load(open("pickles/ablation_tau_stds.pkl", "rb"))
     plt.xlabel("Intensity Percentile of YFP-tau and DAPI Ablated", fontname="Times New Roman", fontsize=12)    
     x = [val * 100 for val in x]
+    x_vals = ax.get_xticks()
+    x_vals = np.insert(x_vals, 0, 0)
+    print(x_vals)
+    ax.set_xticklabels(['{:,.0%}'.format(x_val) for x_val in x_vals], fontname="Times New Roman")
     ax.axhline(.53, linestyle="--", color='black', lw=.80, alpha=0.8)
     ax.errorbar(x, averages, yerr=stds, capsize=1.5, elinewidth=.2, ecolor="black", label="ML Model")
     ax.set_ylabel("Average Pearson Correlation Over Test Set", fontname="Times New Roman", fontsize=12)
@@ -552,11 +553,13 @@ def overlapPlot():
     ax.set_xlabel("Threshold of YFP-tau", fontname="Times New Roman", fontsize=12)
     ax.set_ylabel("Overlap of YFP-tau and AT8-pTau", fontname="Times New Roman", fontsize=12)
     ax.plot(x,y, '+-')
+    ax.set_ylim((0,1))
     y_vals = ax.get_yticks()
     ax.set_yticklabels(['{:,.0%}'.format(y_val) for y_val in y_vals], fontname="Times New Roman")
     for tick in ax.get_xticklabels():
         tick.set_fontname("Times New Roman")
     plt.xticks(np.arange(min(x), max(x) + .25, .25))
+
     plt.savefig("matplotlib_figures/overlapPlot.png", dpi=300)
 
 ## method calls 
