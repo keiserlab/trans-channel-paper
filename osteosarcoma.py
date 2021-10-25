@@ -1,13 +1,8 @@
 """
-Script to train and evaluate models on the independent dataset of the genome-wide functional screen in osteosarcoma cells 
-
-This script is divided into three parts:
-1) class and method definitions
-2) global variables
-3) method calls to run specific parts of the code
-
-Any questions should be directed to daniel.wong2@ucsf.edu. Thank you!
-
+Script to train and evaluate models on the independent dataset of the genome-wide functional screen in U2OS osteosarcoma cells 
+This script is divided into two parts:
+1) global variables
+2) method calls to run specific parts of the code
 """
 from transchannel import *
 
@@ -16,20 +11,17 @@ from transchannel import *
 #GLOBAL VARIABLES
 #=======================================================================================
 #=======================================================================================
-
 hostname = socket.gethostname() 
-if "keiserlab.org" not in hostname:
-    prefix = "/data1/wongd/"
+if "keiser" in hostname:
+    DATA_DIR = "/srv/nas/mk1/users/dwong/tifs/"
 else:
-    prefix = "/srv/nas/mk1/users/dwong/"
-task = "transchannel" #for training and testing the learner on raw, unablated images
-# task = "ablation" ##for training and testing the learner on ablated images at the 95th percentile intensity
+    DATA_DIR = "/data1/wongd/tifs/"
 short = False #param for truncating training and testing process for quick training dev
 img_dim = 1104
-train_params = {'batch_size': 1, 'num_workers': 5}
-test_params = {'batch_size': 1, 'num_workers': 5}
+train_params = {'batch_size': 1, 'num_workers': 3}
+test_params = {'batch_size': 1, 'num_workers': 3}
 plotName = "MODEL_NAME" #name of model to save
-csvName = "datasets/cyclin_dataset.csv"
+csvName = "csvs/cyclin_dataset.csv"
 gpu_list = [1] 
 max_epochs = 5
 learning_rate = .001
@@ -39,16 +31,18 @@ if continue_training:
 lossfn = pearsonCorrLoss
 architecture = "unet mod"
 fold = int(sys.argv[1]) #specify cross validation fold to use in [1,2,3], else any other integer will do a 70% train, 30% test split
+task = sys.argv[2] #either "raw" or "ablation" to determine how to process the images, ablated = 95% intensity ablation
 if fold in [1,2,3]:
     cross_val = True
 else:
     cross_val = False
 device = torch.device("cuda:" + str(gpu_list[0]))
 ## Generators
-if task == "transchannel":
-    dataset = OsteosarcomaDataset(csvName)
+if task == "raw":
+    dataset = OsteosarcomaDataset(csvName, DATA_DIR)
 if task == "ablation":
-    dataset = OsteosarcomaAblationDataset(csvName, .95)
+    dataset = OsteosarcomaAblationDataset(csvName, DATA_DIR, .95)
+print("task: ", task)
 ## Random seed for data split 
 dataset_size = len(dataset)
 indices = list(range(dataset_size))
@@ -85,24 +79,30 @@ if continue_training:
     epoch = checkpoint['epoch']
     loss = checkpoint['loss']
     model.train()
-
-
 shutil.rmtree("outputs/")
 os.mkdir("outputs/")
+
 #=======================================================================================
 #=======================================================================================
 #METHOD CALLS 
 #=======================================================================================
 #=======================================================================================
 
+train(continue_training=False, model=model, max_epochs=max_epochs, training_generator=training_generator, validation_generator=validation_generator, lossfn=lossfn, optimizer=optimizer, plotName="null",device=device)
+if task == "raw":
+    ml_model_perf, null_model_perf, ml_model_mse_perf, null_model_mse_perf = test(sample_size=10000000, model=model, loadName="models/d0_to_d1_cyclin_only_dataset_fold{}.pt".format(fold), validation_generator=validation_generator, lossfn=lossfn,device=device)
+    pickle.dump(ml_model_perf, open("pickles/osteo_ml_model_perf_fold_{}.pkl".format(fold), "wb"))
+    pickle.dump(null_model_perf, open("pickles/osteo_null_model_perf_fold_{}.pkl".format(fold), "wb"))
+    pickle.dump(ml_model_mse_perf, open("pickles/osteo_ml_model_mse_perf_fold_{}.pkl".format(fold), "wb"))
+    pickle.dump(null_model_mse_perf, open("pickles/osteo_null_model_mse_perf_fold_{}.pkl".format(fold), "wb"))
 
-# train(continue_training=False, model=model, max_epochs=max_epochs, training_generator=training_generator, validation_generator=validation_generator, lossfn=lossfn, optimizer=optimizer, plotName="plotName",device=device)
-test(sample_size=1000000, model=model, loadName="models/d0_to_d1_cyclin_only_dataset_fold{}.pt".format(fold), validation_generator=validation_generator, lossfn=lossfn,device=device)
-# if task == "ablation":
-    # test(sample_size=1000000, model=model, loadName="models/d0_to_d1_ablation_cyclin_only_dataset_fold{}_continue_training.pt".format(fold), validation_generator=validation_generator, lossfn=lossfn,device=device)
-# getMSE(loadName="models/d0_to_d1_cyclin_only_dataset_fold{}.pt".format(fold), model=model, validation_generator=validation_generator, device=device)
-# ablationTestOsteosarcoma(sample_size=1000000, validation_generator=validation_generator, model=model, loadName="models/d0_to_d1_cyclin_only_dataset_fold{}.pt".format(fold),device=device)
-# osteosarcomaAblatedAndNonAblated(sample_size=20, validation_generator=validation_generator, model=model, fold=fold, device=device)
+if task == "ablation":
+    ml_model_perf, null_model_perf, ml_model_mse_perf, null_model_mse_perf = test(sample_size=10000000, model=model, loadName="models/d0_to_d1_ablation_cyclin_only_dataset_fold{}_continue_training.pt".format(fold), validation_generator=validation_generator, lossfn=lossfn,device=device)
+    pickle.dump(ml_model_perf, open("pickles/osteo_ablated_ml_model_perf_fold_{}.pkl".format(fold), "wb"))
+    pickle.dump(null_model_perf, open("pickles/osteo_ablated_null_model_perf_fold_{}.pkl".format(fold), "wb"))
+    pickle.dump(ml_model_mse_perf, open("pickles/osteo_ablated_ml_model_mse_perf_fold_{}.pkl".format(fold), "wb"))
+    pickle.dump(null_model_mse_perf, open("pickles/osteo_ablated_null_model_mse_perf_fold_{}.pkl".format(fold), "wb"))
+osteosarcomaAblatedAndNonAblated(sample_size=10000000, validation_generator=validation_generator, model=model, fold=fold, device=device)
 
 
 

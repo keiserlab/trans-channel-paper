@@ -1,10 +1,9 @@
 """
-We include here all of the necessary code to reproduce the main training and model evaluation results from the tau dataset
-This script is divided into five parts:
-1) class and method definitions
+This is the core of the necessary code to reproduce the main training and model evaluation results from the tauopathy dataset and the osteosarcoma dataset
+This script is divided into three parts:
+1) class and method definitions for main results
 2) helper functions
-3) supplemental code for ablation analysis
-Any questions should be directed to daniel.wong2@ucsf.edu. Thank you!
+3) supplemental code
 """
 import torch 
 import torch.nn as nn
@@ -36,11 +35,13 @@ hostname = socket.gethostname()
 #============================================================================
 class ImageDataset(Dataset):
     """
-    Dataset of tau images. getitem returns (YFP name, YFP + DAPI concatenated image, AT8 pTau image)
-    CSV_FILE should be a csv of x,t pairs of full-path strings corresponding to image names
+    Dataset of tau images. INPUTMIN, INPUTMAX, DAPIMIN, DAPIMAX, LABELMIN, and LABELMAX all correspond to float values to normalize our images 
+    DATA_DIR specifies where to read the raw images from 
+    getitem returns (YFP image name, YFP + DAPI concatenated image, AT8 pTau image)
+    CSV_FILE should be a csv of x,t pairs corresponding to image names such that 
     x is the YFP-tau image name, and t is the AT8-pTau image name
     """
-    def __init__(self, csv_file, inputMin, inputMax, DAPIMin, DAPIMax, labelMin, labelMax):
+    def __init__(self, csv_file, inputMin, inputMax, DAPIMin, DAPIMax, labelMin, labelMax, DATA_DIR):
         self.data = pd.read_csv(csv_file).values
         self.inputMin = inputMin
         self.inputMax = inputMax
@@ -48,22 +49,14 @@ class ImageDataset(Dataset):
         self.DAPIMax = DAPIMax
         self.labelMin = labelMin
         self.labelMax = labelMax
-         
+        self.DATA_DIR = DATA_DIR
     def __len__(self):
         return len(self.data)
     
     def __getitem__(self, idx):
         x, t = self.data[idx] 
-        if "keiserlab" not in hostname: #if on butte lab server 
-            x = x.replace("/fast/disk0/dwong/", "/data1/wongd/")
-            t = t.replace("/fast/disk0/dwong/", "/data1/wongd/")
-            x = x.replace("/srv/nas/mk3/users/dwong/", "/data1/wongd/") 
-            t = t.replace("/srv/nas/mk3/users/dwong/", "/data1/wongd/")
-        if "keiserlab" in hostname: 
-            x = x.replace("/data1/wongd/", "/srv/nas/mk3/users/dwong/")
-            t = t.replace("/data1/wongd/", "/srv/nas/mk3/users/dwong/")
-            x = x.replace("/fast/disk0/dwong/", "/srv/nas/mk3/users/dwong/")
-            t = t.replace("/fast/disk0/dwong/", "/srv/nas/mk3/users/dwong/")
+        x = self.DATA_DIR + x
+        t = self.DATA_DIR + t
         x_img = cv2.imread(x, cv2.IMREAD_UNCHANGED) 
         x_img = x_img.astype(np.float32)
         x_img = ((x_img - self.inputMin) / (self.inputMax - self.inputMin)) * 255
@@ -83,96 +76,67 @@ class DAPIDataset(Dataset):
     """
     Dataset of DAPI/AT8 pTau images. getitem returns DAPI name, DAPI image, and AT8 pTau image
     Used for supplemental analysis, and to assess whether or not we can learn the AT8 pTau channel solely from the DAPI channel
-    CSV_FILE should be a csv of x,t pairs of full-path strings corresponding to image names
+    CSV_FILE should be a csv of x,t pairs corresponding to image names
     x is the YFP-tau image name, and t is the AT8-pTau image name. 
     """
-    def __init__(self, csv_file, DAPIMin, DAPIMax, labelMin, labelMax):
+    def __init__(self, csv_file, DATA_DIR):
         self.data = pd.read_csv(csv_file).values
-        self.DAPIMin = DAPIMin
-        self.DAPIMax = DAPIMax
-        self.labelMin = labelMin
-        self.labelMax = labelMax
+        self.DATA_DIR = DATA_DIR
     def __len__(self):
         return len(self.data)
     def __getitem__(self, idx):
         x, t = self.data[idx] 
-        if "keiserlab" not in hostname: #if on butte lab server 
-            x = x.replace("/fast/disk0/dwong/", "/data1/wongd/")
-            t = t.replace("/fast/disk0/dwong/", "/data1/wongd/")
-            x = x.replace("/srv/nas/mk3/users/dwong/", "/data1/wongd/") 
-            t = t.replace("/srv/nas/mk3/users/dwong/", "/data1/wongd/")
-        if "keiserlab" in hostname: 
-            x = x.replace("/data1/wongd/", "/srv/nas/mk3/users/dwong/")
-            t = t.replace("/data1/wongd/", "/srv/nas/mk3/users/dwong/")
-            x = x.replace("/fast/disk0/dwong/", "/srv/nas/mk3/users/dwong/")
-            t = t.replace("/fast/disk0/dwong/", "/srv/nas/mk3/users/dwong/")
+        x = self.DATA_DIR + x
+        t = self.DATA_DIR + t        
         DAPI_img = cv2.imread(getDAPI(x), cv2.IMREAD_UNCHANGED)
         DAPI_img = DAPI_img.astype(np.float32)
-        DAPI_img = ((DAPI_img - self.DAPIMin) / (self.DAPIMax - self.DAPIMin)) * 255
+        DAPI_img = (DAPI_img / 65535.0) * 255
         t_img = cv2.imread(t, cv2.IMREAD_UNCHANGED)
         t_img = t_img.astype(np.float32)
-        t_img = ((t_img - self.labelMin) / (self.labelMax - self.labelMin)) * 255
-        return getDAPI(x), DAPI_img, t_img
+        t_img = (t_img / 65535.0) * 255
+        return getDAPI(x), DAPI_img.reshape(1, DAPI_img.shape[-1], DAPI_img.shape[-1]), t_img
 
 class YFPDataset(Dataset):
     """
     Dataset of YFP-tau/AT8-pTau images. getitem returns YFP-tau name, YFP-tau image, and AT8 pTau image
     Used for supplemental analysis, and to assess learning the AT8 pTau channel solely from the YFP-tau channel
-    CSV_FILE should be a csv of x,t pairs of full-path strings corresponding to image names
+    CSV_FILE should be a csv of x,t pairs corresponding to image names
     x is the YFP-tau image name, and t is the AT8-pTau image name. 
     """
-    def __init__(self, csv_file, inputMin, inputMax, labelMin, labelMax):
+    def __init__(self, csv_file, DATA_DIR):
         self.data = pd.read_csv(csv_file).values
-        self.inputMin = inputMin
-        self.inputMax = inputMax
-        self.labelMin = labelMin
-        self.labelMax = labelMax
+        self.DATA_DIR = DATA_DIR
     def __len__(self):
         return len(self.data)
     def __getitem__(self, idx):
         x, t = self.data[idx] 
-        if "keiserlab" not in hostname: #if on butte lab server 
-            x = x.replace("/fast/disk0/dwong/", "/data1/wongd/")
-            t = t.replace("/fast/disk0/dwong/", "/data1/wongd/")
-            x = x.replace("/srv/nas/mk3/users/dwong/", "/data1/wongd/") 
-            t = t.replace("/srv/nas/mk3/users/dwong/", "/data1/wongd/")
-        if "keiserlab" in hostname: 
-            x = x.replace("/data1/wongd/", "/srv/nas/mk3/users/dwong/")
-            t = t.replace("/data1/wongd/", "/srv/nas/mk3/users/dwong/")
-            x = x.replace("/fast/disk0/dwong/", "/srv/nas/mk3/users/dwong/")
-            t = t.replace("/fast/disk0/dwong/", "/srv/nas/mk3/users/dwong/")
+        x = self.DATA_DIR + x
+        t = self.DATA_DIR + t
         x_img = cv2.imread(x, cv2.IMREAD_UNCHANGED) 
         x_img = x_img.astype(np.float32)
-        x_img = ((x_img - self.inputMin) / (self.inputMax - self.inputMin)) * 255
+        x_img = (x_img / 65535.0) * 255          
         t_img = cv2.imread(t, cv2.IMREAD_UNCHANGED)
         t_img = t_img.astype(np.float32)
-        t_img = ((t_img - self.labelMin) / (self.labelMax - self.labelMin)) * 255
-
-        return x, x_img, t_img
-
+        t_img = (t_img / 65535.0) * 255
+        return x, x_img.reshape(1, x_img.shape[-1], x_img.shape[-1]), t_img 
 
 class OsteosarcomaDataset(Dataset):
     """
     Image dataset for the osteosarcoma system, uses raw, unablated images
-    csv should be in the form d2, d1, d0, such that
-    d0 will be the Hoechst input image name, and d1 will be the cyclin-B1 label image name, d2 is a marker not used in this study, and can be ignored
+    csv should be in the form d1, d0, such that
+    d1 will be the cyclin-B1 label image name and d0 will be the Hoechst input image name
     """
-    def __init__(self, csv_file):
+    def __init__(self, csv_file, DATA_DIR):
         self.data = pd.read_csv(csv_file).values
+        self.DATA_DIR = DATA_DIR
     
     def __len__(self):
         return len(self.data)
     
     def __getitem__(self, idx):
-        d2, d1, d0 = self.data[idx]
-        if "keiserlab" not in hostname: #if on butte lab server 
-            d2 = d2.replace("/srv/nas/mk1/users/dwong/", "/data1/wongd/") 
-            d1 = d1.replace("/srv/nas/mk1/users/dwong/", "/data1/wongd/")
-            d0 = d0.replace("/srv/nas/mk1/users/dwong/", "/data1/wongd/")
-        else: #if on keiser server
-            d2 = d2.replace("/data1/wongd/", "/srv/nas/mk1/users/dwong/") 
-            d1 = d1.replace("/data1/wongd/", "/srv/nas/mk1/users/dwong/")
-            d0 = d0.replace("/data1/wongd/", "/srv/nas/mk1/users/dwong/")
+        d1, d0 = self.data[idx]
+        d1 = self.DATA_DIR + d1
+        d0 = self.DATA_DIR + d0
         d0_img = cv2.imread(d0, cv2.IMREAD_UNCHANGED)
         d0_img = d0_img.astype(np.float32) 
         d0_img = (d0_img / 65535.0) * 255
@@ -184,24 +148,19 @@ class OsteosarcomaDataset(Dataset):
 class OsteosarcomaAblationDataset(Dataset):
     """
     Image Dataset for ablation of the the Hoechst channel in the osteosarcoma dataset 
-    csv should be in the form d2, d1, d0, such that
-    d0 will be the Hoechst input image name, and d1 will be the cyclin-B1 label image name, d2 is a marker not used in this study, and can be ignored
+    csv should be in the form d1, d0, such that
+    d1 will be the cyclin-B1 label image name and d0 will be the Hoechst input image name
     """
-    def __init__(self, csv_file, thresh_percent):
+    def __init__(self, csv_file, DATA_DIR, thresh_percent):
         self.data = pd.read_csv(csv_file).values
+        self.DATA_DIR = DATA_DIR
         self.thresh_percent = thresh_percent
     def __len__(self):
         return len(self.data)
     def __getitem__(self, idx):
-        d2, d1, d0 = self.data[idx]
-        if "keiserlab" not in hostname: #if on butte lab server 
-            d2 = d2.replace("/srv/nas/mk1/users/dwong/", "/data1/wongd/") 
-            d1 = d1.replace("/srv/nas/mk1/users/dwong/", "/data1/wongd/")
-            d0 = d0.replace("/srv/nas/mk1/users/dwong/", "/data1/wongd/")
-        else: #if on keiser server
-            d2 = d2.replace("/data1/wongd/", "/srv/nas/mk1/users/dwong/") 
-            d1 = d1.replace("/data1/wongd/", "/srv/nas/mk1/users/dwong/")
-            d0 = d0.replace("/data1/wongd/", "/srv/nas/mk1/users/dwong/")
+        d1, d0 = self.data[idx]
+        d1 = self.DATA_DIR + d1
+        d0 = self.DATA_DIR + d0
         d0_img = cv2.imread(d0, cv2.IMREAD_UNCHANGED)
         d0_img = d0_img.astype(np.float32) #breaks here 
         d0_img = (d0_img / 65535.0) * 255
@@ -249,7 +208,7 @@ class Unet_mod(nn.Module):
         self.transpose1 = nn.ConvTranspose2d(512,512,2) #not used, but needs to be here to load previously saved state dictionaries of older models that left this unused attribute as part of the state dictionary, legacy artifact
         
     def forward(self, x):
-        h0 = x.view(x.shape[0], x.shape[1], x.shape[-1], x.shape[-1])
+        h0 = x.view(x.shape[0], x.shape[1], x.shape[-1], x.shape[-1]) 
         h0 = nn.functional.relu(self.conv1(h0))
         h1, p1indices = self.maxp1(h0) 
         h2 = nn.functional.relu(self.conv2(h1))
@@ -277,8 +236,8 @@ class Unet_mod(nn.Module):
 class Unet_mod_osteo(nn.Module):
     """
     Same architecture as Unet_mod, but the osteosarcoma training procedure occurred much later than the training for the tauopathy dataset 
-    As a result, the architecture was updated to not include the self.transpose attribute that was included in class Unet_mod (included but also not used and had no function),
-    Models for the osteosarcoma dataset were saved without this attribute, so we need this class to load such models - this is a legacy artifact
+    As a result, the architecture was updated to not include the self.transpose attribute that was included in class Unet_mod (included but also not used and had no function - legacy artifact),
+    Models for the osteosarcoma dataset were saved without this attribute, so we need this class to load such models
     """
     def __init__(self, inputChannels=1):
         super(Unet_mod_osteo, self).__init__()
@@ -307,13 +266,13 @@ class Unet_mod_osteo(nn.Module):
     def forward(self, x):
         h0 = x.view(x.shape[0], x.shape[1], x.shape[-1], x.shape[-1])
         h0 = nn.functional.relu(self.conv1(h0))
-        h1, p1indices = self.maxp1(h0) #1 x 32 x 127 x 127
+        h1, p1indices = self.maxp1(h0) 
         h2 = nn.functional.relu(self.conv2(h1))
-        h3, p2indices = self.maxp2(h2) #63 x 63
+        h3, p2indices = self.maxp2(h2)
         h4 = nn.functional.relu(self.conv3(h3))
-        h5, p3indices = self.maxp3(h4) #31 x 31
+        h5, p3indices = self.maxp3(h4) 
         h6 = nn.functional.relu(self.conv4(h5))
-        h7, p4indices = self.maxp4(h6) #15 x 15
+        h7, p4indices = self.maxp4(h6) 
         h8 = nn.functional.relu(self.conv5(h7))
         #upsamp, 2x2 conv, 3x3 transposed_conv with stitch 
         h9 = self.upsamp1(h8) 
@@ -330,16 +289,17 @@ class Unet_mod_osteo(nn.Module):
         h20 = nn.functional.relu(self.conv13(torch.cat((h0,h19), dim=1))) #127 x 127
         return h20
 
-def train(continue_training=False, model=None, max_epochs=20, training_generator=None, validation_generator=None, lossfn=None, optimizer=None, plotName=None, device=None):
+def train(continue_training=False, load_training_name="None", model=None, max_epochs=20, training_generator=None, validation_generator=None, lossfn=None, optimizer=None, plotName=None, device=None):
     """
-    Method to train and save a model as a .pt object, saves the model every 5 epochs
+    Method to train and save a model as a .pt object
+    Saves the model every epoch
     CONTINUE_TRAINING indicates whether or not we should load a MODEL as a warm start for training
     MAX_EPOCHS indicates the number of epochs we should use for training
-    TRAINING_GENERATOR and VALIDATION_GENERATOR are the training and validation generators to use
-    LOSSFN is our loss function to use
-    OPTIMIZER is the optimizer function to use 
+    TRAINING_GENERATOR and VALIDATION_GENERATOR are the training and validation generators
+    LOSSFN is our loss function
+    OPTIMIZER is the optimizer function
     PLOTNAME is the string that we will save our model name with 
-    DEVICE is the cuda device to allocate to  
+    DEVICE is the cuda device to allocate  
     Saves the trained model to directory "models/"
     """
     if continue_training: ##flag to use if we are continuing to train a previously trained model
@@ -360,41 +320,34 @@ def train(continue_training=False, model=None, max_epochs=20, training_generator
             local_batch, local_labels = local_batch.to(device), local_labels.to(device)
             outputs = model(local_batch)
             loss = lossfn(outputs, local_labels)
-            # print(loss)
-            if math.isnan(loss):
-                    i -= 1
-                    print("nan loss at epoch: {}, image name: {}".format(epoch, names))
-                    continue 
             running_loss += loss             
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
         print("epoch: ", epoch + 1, "avg training loss over all batches: ", running_loss / float(i), ", time elapsed: ", time.time() - start_time)
-        ##save model and check validation loss every 5 epochs
-        if epoch % 5 == 0:
-            saveTraining(model, epoch, optimizer, running_loss / float(i), "models/" + plotName + ".pt") 
-            running_val_loss = 0
-            j = 0
-            with torch.set_grad_enabled(False):
-                for names, local_batch, local_labels in validation_generator:
-                    j += 1
-                    local_batch, local_labels = local_batch.to(device), local_labels.to(device)
-                    outputs = model(local_batch)
-                    loss =  lossfn(outputs, local_labels)
-                    running_val_loss += loss 
-            print("epoch: ", epoch + 1, " global validation loss: ", running_val_loss / float(j))
+        ##save model and check validation loss every epoch
+        saveTraining(model, epoch, optimizer, running_loss / float(i), "models/" + plotName + ".pt") 
+        running_val_loss = 0
+        j, k = 0, 0
+        with torch.set_grad_enabled(False):
+            for names, local_batch, local_labels in validation_generator:
+                j += 1
+                local_batch, local_labels = local_batch.to(device), local_labels.to(device)
+                outputs = model(local_batch)
+                loss =  lossfn(outputs, local_labels)
+                running_val_loss += loss 
+        print("epoch: ", epoch + 1, " global validation loss: ", running_val_loss / float(j))
     saveTraining(model, epoch, optimizer, running_loss / float(j), "models/" + plotName + ".pt")
 
 def test(sample_size=1000000, model=None, loadName=None, validation_generator=None, lossfn=None, device=None):
     """
-    Method to run the model on the test set over SAMPLE_SIZE number of images
+    Method to run the MODEL on the test set over SAMPLE_SIZE number of images
     MODEL should be of type nn.Module, and specifies the architecture to use
     LOADNAME is the name of the model to load 
-    CROSS_VAL indicates if we're testing under a cross-validation scheme
     VALIDATION_GENERATOR is the generator that iterates over validation/test images
     LOSSFN is the loss function to use
     DEVICE is the cuda device to allocate to  
-    Print the pearson performance and mse performance of both the ML Model and also the Null Model (0th channel) and pickle the result to pickles/
+    Returns and prints the pearson performance and mse performance of both the ML Model and also the Null Model (0th channel)
     """
     start_time = time.time()
     checkpoint = torch.load(loadName)
@@ -402,7 +355,7 @@ def test(sample_size=1000000, model=None, loadName=None, validation_generator=No
     epoch = checkpoint['epoch']
     loss = checkpoint['loss']
     model.eval()
-    performance, null_performance, mse_performance, null_mse_performance = [], [], [], []
+    performance, null_performance, mse_performance, null_mse_performance, pearson_inp_predicted = [], [], [], [], []
     total_step = len(validation_generator)
     j = 0
     running_loss = 0
@@ -415,10 +368,10 @@ def test(sample_size=1000000, model=None, loadName=None, validation_generator=No
             running_loss += loss 
             pearson = getPearson(outputs, local_labels)
             performance.append(pearson) 
-            null_performance.append(getPearson(local_batch[:, 0, :, :], local_labels))
             mse_performance.append(calculateMSE(outputs, local_labels))
+            null_performance.append(getPearson(local_batch[:, 0, :, :], local_labels))
             null_mse_performance.append(calculateMSE(local_batch[:, 0, :, :], local_labels))
-            # print(str(j) + "/" + str(total_step) + ", batch pearson: ", pearson)
+            pearson_inp_predicted.append(getPearson(local_batch[:, 0, :, :], outputs))
             if j == sample_size:
                 break
     ml_model_perf = np.mean(performance), np.std(performance)
@@ -430,12 +383,14 @@ def test(sample_size=1000000, model=None, loadName=None, validation_generator=No
     print("global null pearson performance (0th channel): ", null_model_perf) 
     print("global MSE performance: ", ml_model_mse_perf)
     print("global null MSE performance (0th channel): ", null_model_mse_perf)
+    print("pearson correlation between input and predicted image: ", np.mean(pearson_inp_predicted), np.std(pearson_inp_predicted))
     print("global loss: ", running_loss / float(j))
     return ml_model_perf, null_model_perf, ml_model_mse_perf, null_model_mse_perf
 
 def testOnSeparatePlates(sample_size, model=None, loadName=None, validation_generator=None, lossfn=None, device=None):
     """
-    runs model evaluation and calculates pearson by plate, given SAMPLE_SIZE number of images 
+    Runs model evaluation and calculates pearson by plate (each plate had a unique drug condition), given SAMPLE_SIZE number of images 
+    Prints and pickles the results
     """
     plate_pearsons = {i: [] for i in range(1,7)} #key plate number, value: list of pearson correlations
     null_YFP_pearsons = {i: [] for i in range(1,7)}
@@ -451,8 +406,8 @@ def testOnSeparatePlates(sample_size, model=None, loadName=None, validation_gene
     running_loss = 0
     with torch.set_grad_enabled(False):
         for names, local_batch, local_labels in validation_generator:
-            plateNumber = int(names[0][names[0].find("plate") + 5 :names[0].find("plate") + 6]) ##given plate number <= 9!
-            assert(plateNumber < 10)
+            plateNumber = int(names[0][names[0].find("plate") + 5 :names[0].find("plate") + 6]) ##given plate number <= 9! our study used plates 1-6
+            assert(plateNumber < 7)
             j += 1
             local_batch, local_labels = local_batch.to(device), local_labels.to(device)
             outputs = model(local_batch)       
@@ -460,7 +415,6 @@ def testOnSeparatePlates(sample_size, model=None, loadName=None, validation_gene
             running_loss += loss 
             pearson = getPearson(outputs, local_labels)
             performance.append(pearson) 
-            print(pearson, plateNumber)
             plate_pearsons[plateNumber].append(pearson)
             null_YFP_pearson = getPearson(local_batch[:,0,:,:], local_labels)
             null_YFP_pearsons[plateNumber].append(null_YFP_pearson)
@@ -487,16 +441,17 @@ def testOnSeparatePlates(sample_size, model=None, loadName=None, validation_gene
     pickle.dump(null_DAPI_performances, open("pickles/separatePlateTestDAPIPerformances.pkl", "wb"))
     pickle.dump(null_DAPI_stds, open("pickles/separatePlateTestDAPIStds.pkl", "wb"))
 
-def getROC(lab_thresh, sample_size, model=None, loadName=None, validation_generator=None, device=None):
+def getROC(lab_thresh, sample_size, model=None, loadName=None, validation_generator=None, fold=-1, device=None):
     """
     LAB_THRESH is the pixel threshold that we use to binarize our label image 
     SAMPLE_SIZE specifies how many images we want to include in this analysis
     MODEL is the model of type NN.Module (a trained model specified by the name within this function will be loaded)
     LOADNAME is the name of the model to load
     VALIDATION_GENERATOR is the generator that iterates over validation/test images to evaluate
+    FOLD specifies the fold of the cross validation (or if no cross validation, then specify fold != 1,2, or 3)
     DEVICE is the cuda device to allocate to 
     Saves ROC curves for YFP Null Model, DAPI Null Model, and the actual ML model, 
-    Pickles the coordinates of the different curves, and saves to pickles/
+    Pickles and returns the coordinates of the different curves, and saves to pickles/
     """
     checkpoint = torch.load(loadName)
     model.load_state_dict(checkpoint['model_state_dict'])
@@ -504,21 +459,12 @@ def getROC(lab_thresh, sample_size, model=None, loadName=None, validation_genera
     mapp = {} #will correspond to ML model results
     null_mapp = {} #will correspond to Null YFP model results
     null_DAPI_mapp = {} #will correspond to Null DAPI model results
-    # threshs = list(np.arange(0, .9, .1)) #threshs are the various thresholds that we will use to binarize our predicted label images
-    # threshs += list(np.arange(.90, 1.1, .01))
-    # threshs +=  list(np.arange(1.1, 2, .1)) 
-    # threshs +=  list(np.arange(2, 5, 1)) 
-    # threshs.append(30) 
-    # threshs.append(1000)
-
-    threshs = list(np.arange(-1, -.1, .1)) #threshs are the various thresholds that we will use to binarize our predicted label images
+    threshs = list(np.arange(-1, -.1, .1)) #the various thresholds that we will use to binarize our predicted label images
     threshs += list(np.arange(-.1, .1, .01))
     threshs +=  list(np.arange(.1, 1, .1)) 
     threshs +=  list(np.arange(1, 4, 1)) 
     threshs.append(30) 
     threshs.append(1000)
-
-
     for t in threshs:
         mapp[t] = [] #thresh to list of (FPR, TPR) points
         null_mapp[t] = []
@@ -552,16 +498,16 @@ def getROC(lab_thresh, sample_size, model=None, loadName=None, validation_genera
             x = [t[1] for t in coordinates]
             y = [t[2] for t in coordinates]
             if i == 0:
-                # pickle.dump(x, open("pickles/null_mapp_x_values_fold_{}.pk".format(fold), "wb"))
-                # pickle.dump(y, open("pickles/null_mapp_y_values_fold_{}.pk".format(fold),  "wb"))
+                pickle.dump(x, open("pickles/null_YFP_mapp_x_values_fold_{}.pk".format(fold), "wb"))
+                pickle.dump(y, open("pickles/null_YFP_mapp_y_values_fold_{}.pk".format(fold),  "wb"))
                 null_YFP_x, null_YFP_y = x, y
             if i == 1:
-                # pickle.dump(x, open("pickles/null_DAPI_mapp_x_values_fold_{}.pk".format(fold), "wb"))
-                # pickle.dump(y, open("pickles/null_DAPI_mapp_y_values_fold_{}.pk".format(fold), "wb"))
+                pickle.dump(x, open("pickles/null_DAPI_mapp_x_values_fold_{}.pk".format(fold), "wb"))
+                pickle.dump(y, open("pickles/null_DAPI_mapp_y_values_fold_{}.pk".format(fold), "wb"))
                 null_DAPI_x, null_DAPI_y = x, y
             if i == 2:
-                # pickle.dump(x, open("pickles/mapp_x_values_fold_{}.pk".format(fold), "wb"))
-                # pickle.dump(y, open("pickles/mapp_y_values_fold_{}.pk".format(fold), "wb"))
+                pickle.dump(x, open("pickles/mapp_x_values_fold_{}.pk".format(fold), "wb"))
+                pickle.dump(y, open("pickles/mapp_y_values_fold_{}.pk".format(fold), "wb"))
                 ML_x, ML_y = x, y
             i += 1
             labels, x, y = labels[::-1], x[::-1], y[::-1]
@@ -571,6 +517,9 @@ def getROC(lab_thresh, sample_size, model=None, loadName=None, validation_genera
 
 def osteosarcomaAblatedAndNonAblated(sample_size=100, validation_generator=None, model=None, fold=None, device=None):
     """
+    Method to load the model trained on ablated images and the model trained on raw images
+    Runs through the test set, and saves example images to outputs/ directory 
+    SAMPLE_SIZE specifies the number of images to run through, VALIDATION_GENERATOR is the validation generator, MODEL is the architeture to use, FOLD is the cross-validation fold, DEVICE is the cuda device 
     """
     ablated_model = Unet_mod_osteo(inputChannels=1)
     ablated_model = ablated_model.to(device)
@@ -585,9 +534,8 @@ def osteosarcomaAblatedAndNonAblated(sample_size=100, validation_generator=None,
         for names, local_batch, local_labels in validation_generator:
             rand = np.random.randint(0,100000000)
             img_dim = local_batch.shape[-1]
-           
             ##plot raw Hoechst, raw cyclinB1 first
-            cv2.imwrite("outputs/" + str(rand) + "_a_OG_Hoechst.tif", ((local_batch.cpu().numpy().reshape(img_dim, img_dim) / 255) * 65535).astype(np.uint16))
+            cv2.imwrite("outputs/" + str(rand) + "_a_raw_Hoechst.tif", ((local_batch.cpu().numpy().reshape(img_dim, img_dim) / 255) * 65535).astype(np.uint16))
             cv2.imwrite("outputs/" + str(rand) + "_c_cyclinB1_label.tif", ((local_labels.cpu().numpy().reshape(img_dim, img_dim) / 255) * 65535).astype(np.uint16))
             ##use unablated model to predict with raw image 
             local_batch, local_labels = local_batch.to(device), local_labels.to(device)
@@ -595,8 +543,7 @@ def osteosarcomaAblatedAndNonAblated(sample_size=100, validation_generator=None,
             pearson = getPearson(unablated_outputs, local_labels)
             ##plot raw prediction of cyclinB1
             cv2.imwrite("outputs/" + str(rand) + "_d_predicted_raw_pearson={}.tif".format(pearson), ((unablated_outputs.cpu().numpy().reshape(img_dim, img_dim) / 255) * 65535).astype(np.uint16))
-
-             ##ablate bottom 95% of pixels to 0
+            ##ablate bottom 95% of pixels to 0
             a = .95
             local_batch = local_batch.cpu().numpy()
             img_dim = local_batch.shape[-1]
@@ -621,21 +568,12 @@ def osteosarcomaAblatedAndNonAblated(sample_size=100, validation_generator=None,
             if i >= sample_size:
                 break
 
-
-            # local_batch = local_batch.reshape((1, 1, img_dim, img_dim))
-            # local_batch = torch.from_numpy(local_batch).float().to(device)
-            # local_labels = local_labels.to(device)
-
-
-
-
-
-       
 #============================================================================
 #============================================================================
 ## HELPER FUNCTIONS
 #============================================================================
 #============================================================================
+
 def calculateMSE(predicted, actual):
     """
     Helper function that calculates the MSE between PREDICTED and ACTUAL, performing a local normalization to 0 mean and unit variance
@@ -664,7 +602,7 @@ def pearsonCorrLoss(outputs, targets):
 
 def saveTraining(model, epoch, optimizer, loss, PATH):
     """
-    helper function to save MODEL, EPOCH, OPTIMIZER, and LOSS, as pytorch file to PATH
+    Helper function to save MODEL, EPOCH, OPTIMIZER, and LOSS, as pytorch file to PATH
     """
     torch.save({
             'epoch': epoch,
@@ -702,38 +640,29 @@ def plotInputs(inputs, labels, predicted, directory, rand=None):
     inputs = inputs.cpu().numpy()
     labels = labels.cpu().numpy()
     predicted = predicted.cpu().numpy()
+    print(inputs.shape)
     pearsons = []
     for i in range(0, len(inputs)):
         if rand is None:
             rand = np.random.randint(0,10000000000)
-        inp = inputs[i][0].reshape((img_dim,img_dim))
-        if normalize == "unit":
-            inp = (inp * inputSTD) + inputMean
-            inp = inp.astype(np.uint8)
-        if normalize == "scale":
-            inp = (inp / 255) * inputMax
-            inp = inp.astype(np.uint16)
-        cv2.imwrite(directory + str(rand) + "input_yfp.tif", inp)
-        dapi = inputs[i][1].reshape((img_dim, img_dim))
-        dapi = (dapi / 255) * inputMax
-        dapi = dapi.astype(np.uint16)
-        cv2.imwrite(directory + str(rand) + "input_dapi.tif", dapi)
+        img_dim = inputs.shape[-1]
+        inp = inputs[i][0].reshape((img_dim,img_dim))       
+        inp = (inp / 255) * 65535.0
+        inp = inp.astype(np.uint16)
+        cv2.imwrite(directory + str(rand) + "input_0.tif", inp)
+        if inputs.shape[1] == 2: 
+            dapi = inputs[i][1].reshape((img_dim, img_dim))
+            dapi = (dapi / 255) * inputMax
+            dapi = dapi.astype(np.uint16)
+            cv2.imwrite(directory + str(rand) + "input_1.tif", dapi)
         lab = labels[i].reshape((img_dim,img_dim))
-        if normalize == "unit":
-            lab = (lab * labelSTD) + labelMean
-            lab = lab.astype(np.uint8)
-        if normalize == "scale":
-            lab = (lab / 255) * labelMax
-            lab = lab.astype(np.uint16)
+        lab = (lab / 255) * 65535.0
+        lab = lab.astype(np.uint16)
         cv2.imwrite(directory + str(rand) + "label_AT8.tif", lab)
         pred = predicted[i].reshape((img_dim,img_dim))
-        if normalize == "unit":
-            pred = (pred * labelSTD) + labelMean
-            pred = pred.astype(np.uint8)
-        if normalize == "scale":
-            pred = (pred / 255) * labelMax 
-            pred = pred.astype(np.uint16)
-        corr = np.corrcoef(lab.flatten(), pred.flatten())[0][1] #pearson correlation after transformations
+        pred = (pred / 255) * 65535.0
+        pred = pred.astype(np.uint16)
+        corr = np.corrcoef(lab.flatten(), pred.flatten())[0][1] #pearson correlation after transformations (pearson correlations of raw images are reported in study)
         cv2.imwrite(directory + str(rand) + "predicted_AT8_pearson=" + str(corr)[0:5] + ".tif", pred)
 
 def getMetrics(predicted, labels, lab_thresh=None, pred_thresh=None):
@@ -766,11 +695,86 @@ def getMetrics(predicted, labels, lab_thresh=None, pred_thresh=None):
     FPR = false_positive / float(false_positive + true_negative ) 
     return TPR, TNR, PPV, NPV, FNR, FPR
 
+def findStats(validation_generator, device):
+    """
+    finds the average mean and std of inputs (first channel) and labels over the test set of images for the tauopathy dataset
+    """
+    start_time = time.time()
+    total_step = len(validation_generator)
+    print("test size: ", total_step)
+    j = 0
+    input_stats = [] #list of (mean, std)
+    label_stats = [] 
+    with torch.set_grad_enabled(False):
+        for names, local_batch, local_labels in validation_generator:
+            j += 1
+            local_batch, local_labels = local_batch.to(device), local_labels.to(device)
+            local_batch = local_batch.cpu().numpy()
+            local_labels = local_labels.cpu().numpy()
+            for i in range(0, len(local_batch)):
+                img = local_batch[i][0]
+                img = (img / float(255)) * 65535.0
+                label = local_labels[i]
+                label = (label / float(255)) * 65535.0
+                img = img.reshape((2048,2048))
+                label = label.reshape((2048,2048))
+                input_stats.append((np.mean(img), np.std(img)))
+                label_stats.append((np.mean(label), np.std(label)))
+        input_stats = [sum(y) / len(y) for y in zip(*input_stats)]
+        label_stats = [sum(y) / len(y) for y in zip(*label_stats)]
+        print("input stats: ", input_stats)
+        print("label stats: ", label_stats)
+        print("time elapsed: ", time.time() - start_time)
+
 #============================================================================
 #============================================================================
 ## SUPPLEMENTAL CODE
 #============================================================================
 #============================================================================
+
+def getOverlap(sample_size=1000000, generator=None):
+    """
+    SAMPLE_SIZE indicates how many image example pairs to calculate overlap, GENERATOR specifies the data generator
+    Finds the percentage of signal that is present in both YFP input and pTau output
+    Divided by the total signal of pTau
+    Method to show that essentially all of pTau signal is also present in YFP channel (to some permissive threshold) 
+    Pickles the results of overlap at each threshold to pickles/ directory  
+    """
+    overlaps = []
+    start_time = time.time()
+    label_thresh = 1 
+    input_threshs = [1, .75, .5, .25, 0, -.25, -.5, -.75, -1] #anything over input_thresh will be considered positive signal
+    for input_thresh in input_threshs:
+        fractions = []
+        j = 0
+        with torch.set_grad_enabled(False):
+            for names, local_batch, local_labels in generator:
+                j += 1
+                local_batch = local_batch.cpu().numpy()
+                local_labels = local_labels.cpu().numpy()
+                for i in range(0, len(local_batch)):
+                    img = local_batch[i][0]
+                    img = (img / float(255)) * 65535.0
+                    label = local_labels[i]
+                    label = (label / float(255)) * 65535.0
+                    img = img.reshape((2048,2048))
+                    label = label.reshape((2048,2048))
+                    lmean, lstd = np.mean(label), np.std(label)
+                    imean, istd = np.mean(img), np.std(img)
+                    label = ((label - lmean) /float(lstd))
+                    img = ((img - imean) /float(istd))
+                    img_count = np.sum(np.where((img >= input_thresh), 1, 0))
+                    label_count = np.sum(np.where((label >= label_thresh), 1, 0))
+                    overlap = np.sum(np.where((label >= label_thresh) & (img >= input_thresh), 1, 0))
+                    fraction = overlap / float(label_count)
+                    fractions.append(fraction)
+                if j == sample_size:
+                    break
+        overlap_avg = np.mean(fractions)
+        print("inp thresh: ", input_thresh, "label thresh: ", label_thresh, "average overlap: ",overlap_avg)
+        overlaps.append(overlap_avg)
+    pickle.dump(input_threshs, open("pickles/input_threshs_for_overlap.pkl", "wb"))
+    pickle.dump(overlaps, open("pickles/overlaps.pkl", "wb"))
 
 class TauAblationDataset(Dataset):
     """
@@ -820,9 +824,11 @@ def ablationTestTau(sample_size=1000000, validation_generator=None, ablate_DAPI_
     SAMPLE_SIZE is the number of images to evaluate from the VALIDATION_GENERATOR
     VALIDATION_GENERATOR is the generator that iterates over validation/test images to evaluate
     If ABLATE_DAPI_ONLY, then will only ablate the DAPI input and leave YFP-tau alone 
+    MODEL specifies which architecture to use
     LOADNAME is the name of the model to load and evaluate 
     DEVICE is the cuda device to allocate to
     Method to run the model on the tauopathy test set and print pearson performance under a range of ablation conditions
+    pickles the results
     """
     ablations = list(np.arange(0, .1, .02))
     ablations += list(np.arange(.1, 1.1, .1))
@@ -867,68 +873,15 @@ def ablationTestTau(sample_size=1000000, validation_generator=None, ablate_DAPI_
                 local_labels = local_labels.to(device)
                 outputs = model(local_batch)
                 pearson = getPearson(outputs, local_labels)            
-                print(str(j) + "/" + str(total_step) + ", batch pearson: ", pearson)
                 if j == sample_size:
                     break
                 performance.append(pearson) 
         x.append(a)
         y.append(np.mean(performance))
         stds.append(np.std(performance))
+        pickle.dump(x, open("pickles/ablation_tau_x.pkl", "wb"))
+        pickle.dump(y, open("pickles/ablation_tau_y.pkl", "wb"))
+        pickle.dump(stds, open("pickles/ablation_tau_stds.pkl", "wb"))
         print("ablation: {}, global performance: avg={}, std= {}".format(a, np.mean(performance), np.std(performance)))
     
-def ablationTestOsteosarcoma(sample_size=1000000, validation_generator=None,  model=None, loadName=None, device=None):
-    """
-    SAMPLE_SIZE is the number of images to evaluate from the VALIDATION_GENERATOR
-    VALIDATION_GENERATOR is the generator that iterates over validation/test images to evaluate
-    LOADNAME is the name of the model to load and evaluate 
-    DEVICE is the cuda device to allocate to
-    Method to run the MODEL on the osteosarcoma test set and print pearson performance under a range of ablation conditions
-
-    """
-    ablations = list(np.arange(0, .1, .02))
-    ablations += list(np.arange(.1, .9, .1))
-    ablations += list(np.arange(.9, 1.02, .02))
-    x = []
-    y = []
-    y_null = []
-    start_time = time.time()
-    checkpoint = torch.load(loadName, map_location='cuda:0')
-    model.load_state_dict(checkpoint['model_state_dict'])
-    model.eval()
-    for a in ablations:
-        print("ablation", a)
-        performance = []
-        null_performance = []
-        total_step = len(validation_generator)
-        j = 0
-        with torch.set_grad_enabled(False):
-            for names, local_batch, local_labels in validation_generator:
-                j += 1
-                ##ablate bottom x% of pixels to 0
-                local_batch = local_batch.cpu().numpy()
-                img_dim = local_batch.shape[-1]
-                local_batch = local_batch.reshape((img_dim, img_dim))
-                thresh_index = int(1104 * 1104 * a)
-                sorted_local_batch = np.sort(local_batch, axis=None)
-                if a == 1:
-                    threshold = 10000000
-                else:
-                    threshold = sorted_local_batch[thresh_index]
-                local_batch = local_batch.reshape((1, 1, img_dim, img_dim))
-                local_batch = torch.from_numpy(local_batch).float().to(device)
-                local_labels = local_labels.to(device)
-                outputs = model(local_batch)
-                pearson = getPearson(outputs, local_labels)    
-                performance.append(pearson) 
-                print(pearson)
-                null_performance.append(getPearson(local_batch, local_labels))
-                if j == sample_size:
-                    break       
-        x.append(a)
-        y.append(np.mean(performance))
-        y_null.append(np.mean(null_performance))
-        print("global performance: ", np.mean(performance), np.std(performance))
-    print("x: ", x)
-    print("y: ", y)
-    print("y_null: ", y_null)
 
