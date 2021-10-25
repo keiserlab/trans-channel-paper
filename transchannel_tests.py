@@ -254,7 +254,6 @@ class DatasetTests(unittest.TestCase):
             if i > sample_size:
                 break
 
-<<<<<<< HEAD
 class ArchitectureTests(unittest.TestCase):
     """
     test to make sure number of parameters matches with that computed by hand
@@ -275,7 +274,4 @@ class ArchitectureTests(unittest.TestCase):
 
 
 sample_size = 2#1000000
-=======
-sample_size = 1000000
->>>>>>> 9b41848f76d79853610f18b6821c024ebd2905de
 unittest.main()
