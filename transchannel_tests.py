@@ -267,11 +267,9 @@ class ArchitectureTests(unittest.TestCase):
         model.load_state_dict(checkpoint['model_state_dict'])
         total_params = 0
         for name, parameter in model.named_parameters():
-            print(name, parameter.requires_grad)
-            print(parameter.shape)
             total_params += parameter.numel()
         self.assertEqual(total_params -(512*512*2*2) - 512,3814401) ##left in an unused param, historic artifact
 
 
-sample_size = 2#1000000
+sample_size = 1000000
 unittest.main()

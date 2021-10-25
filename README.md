@@ -68,7 +68,7 @@ This folder is where figure_generator.py saves its files <br />
 This folder is a temporary directory used for saving images <br />
 
 **Demo:**<br />
-To demo the model, you can run all of the tests included in transchannel_tests.py. Computation for calculating ROC can be very intensive and takes multiple hours of compute. Tests can be run with a smaller sample size by modifying the variable 'sample_size' found in transchannel_tests.py, which determines how many images to pull from the test set. 
+To demo the model, you can run all of the tests included in transchannel_tests.py. Computation for calculating ROC can be very intensive and takes multiple hours of compute. Tests can be run with a smaller sample size by modifying the variable 'sample_size' found in transchannel_tests.py, which determines the maximum number of images to pull from the test set. 
 
 
 
