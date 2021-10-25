@@ -316,27 +316,31 @@ def train(continue_training=False, load_training_name="None", model=None, max_ep
         i = 0 
         running_loss = 0
         for names, local_batch, local_labels in training_generator:
-            i += 1
             local_batch, local_labels = local_batch.to(device), local_labels.to(device)
             outputs = model(local_batch)
             loss = lossfn(outputs, local_labels)
+            if math.isnan(loss):
+                print("nan loss")
+                continue
             running_loss += loss             
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            i += 1
         print("epoch: ", epoch + 1, "avg training loss over all batches: ", running_loss / float(i), ", time elapsed: ", time.time() - start_time)
-        ##save model and check validation loss every epoch
         saveTraining(model, epoch, optimizer, running_loss / float(i), "models/" + plotName + ".pt") 
-        running_val_loss = 0
-        j, k = 0, 0
-        with torch.set_grad_enabled(False):
-            for names, local_batch, local_labels in validation_generator:
-                j += 1
-                local_batch, local_labels = local_batch.to(device), local_labels.to(device)
-                outputs = model(local_batch)
-                loss =  lossfn(outputs, local_labels)
-                running_val_loss += loss 
-        print("epoch: ", epoch + 1, " global validation loss: ", running_val_loss / float(j))
+        ##check validation loss
+        if epoch == max_epochs - 1:
+            running_val_loss = 0
+            j, k = 0, 0
+            with torch.set_grad_enabled(False):
+                for names, local_batch, local_labels in validation_generator:
+                    j += 1
+                    local_batch, local_labels = local_batch.to(device), local_labels.to(device)
+                    outputs = model(local_batch)
+                    loss =  lossfn(outputs, local_labels)
+                    running_val_loss += loss 
+            print("epoch: ", epoch + 1, " global validation loss: ", running_val_loss / float(j))
     saveTraining(model, epoch, optimizer, running_loss / float(j), "models/" + plotName + ".pt")
 
 def test(sample_size=1000000, model=None, loadName=None, validation_generator=None, lossfn=None, device=None):
@@ -441,10 +445,11 @@ def testOnSeparatePlates(sample_size, model=None, loadName=None, validation_gene
     pickle.dump(null_DAPI_performances, open("pickles/separatePlateTestDAPIPerformances.pkl", "wb"))
     pickle.dump(null_DAPI_stds, open("pickles/separatePlateTestDAPIStds.pkl", "wb"))
 
-def getROC(lab_thresh, sample_size, model=None, loadName=None, validation_generator=None, fold=-1, device=None):
+def getPerformanceCurve(lab_thresh, sample_size, plot="ROC", model=None, loadName=None, validation_generator=None, fold=-1, device=None):
     """
     LAB_THRESH is the pixel threshold that we use to binarize our label image 
     SAMPLE_SIZE specifies how many images we want to include in this analysis
+    PLOT is either "ROC" or "PRC"
     MODEL is the model of type NN.Module (a trained model specified by the name within this function will be loaded)
     LOADNAME is the name of the model to load
     VALIDATION_GENERATOR is the generator that iterates over validation/test images to evaluate
@@ -463,10 +468,13 @@ def getROC(lab_thresh, sample_size, model=None, loadName=None, validation_genera
     threshs += list(np.arange(-.1, .1, .01))
     threshs +=  list(np.arange(.1, 1, .1)) 
     threshs +=  list(np.arange(1, 4, 1)) 
-    threshs.append(30) 
-    threshs.append(1000)
+    if plot == "ROC":
+        threshs.append(30) 
+        threshs.append(1000)
+    if plot == "PRC": ##need more granular thresholds here for PRC
+        threshs += list(range(4,18, 2))
     for t in threshs:
-        mapp[t] = [] #thresh to list of (FPR, TPR) points
+        mapp[t] = [] #thresh to list of (x,y) points, for ROC: (FPR, TPR), for PRC: (TPR, PPV)
         null_mapp[t] = []
         null_DAPI_mapp[t] = []
     with torch.set_grad_enabled(False):
@@ -478,42 +486,50 @@ def getROC(lab_thresh, sample_size, model=None, loadName=None, validation_genera
                 TPR, TNR, PPV, NPV, FNR, FPR = getMetrics(outputs, local_labels, lab_thresh=lab_thresh, pred_thresh=t)
                 null_TPR, null_TNR, null_PPV, null_NPV, null_FNR, null_FPR = getMetrics(local_batch[:,0,:,:], local_labels, lab_thresh=lab_thresh, pred_thresh=t)
                 null_DAPI_TPR, null_DAPI_TNR, null_DAPI_PPV, null_DAPI_NPV, null_DAPI_FNR, null_DAPI_FPR = getMetrics(local_batch[:,1,:,:], local_labels, lab_thresh=lab_thresh, pred_thresh=t) #for NULL AUC
-                mapp[t].append((FPR, TPR))
-                null_mapp[t].append((null_FPR, null_TPR))
-                null_DAPI_mapp[t].append((null_DAPI_FPR, null_DAPI_TPR))
+                if plot == "ROC":
+                    mapp[t].append((FPR, TPR))
+                    null_mapp[t].append((null_FPR, null_TPR))
+                    null_DAPI_mapp[t].append((null_DAPI_FPR, null_DAPI_TPR))
+                if plot == "PRC":
+                    if math.isnan(PPV) or math.isnan(null_PPV) or math.isnan(null_DAPI_PPV): ##skip threshold if not defined, precision is N/A if no positive preds
+                        continue
+                    mapp[t].append((TPR, PPV))
+                    null_mapp[t].append((null_TPR, null_PPV))
+                    null_DAPI_mapp[t].append((null_DAPI_TPR, null_DAPI_PPV))
             j += 1
             if j > sample_size:
                 break
             print(j)
-        ##generate ROC curves data, one per model
+        ##generate curves data, one per model
         i = 0
         for m in [null_mapp, null_DAPI_mapp, mapp]:
             coordinates = [] #list of tuples (thresh, FPR, TPR) to plot
             for key in m:
-                FPRs = [l[0] for l in m[key]]
-                TPRs = [l[1] for l in m[key]]
-                coordinates.append((key, np.mean(FPRs), np.mean(TPRs)))
+                xs = [l[0] for l in m[key]]
+                ys = [l[1] for l in m[key]]
+                coordinates.append((key, np.mean(xs), np.mean(ys)))
             coordinates = sorted(coordinates, key=lambda x: x[0])
             labels = [t[0] for t in coordinates] 
             x = [t[1] for t in coordinates]
             y = [t[2] for t in coordinates]
             if i == 0:
-                pickle.dump(x, open("pickles/null_YFP_mapp_x_values_fold_{}.pk".format(fold), "wb"))
-                pickle.dump(y, open("pickles/null_YFP_mapp_y_values_fold_{}.pk".format(fold),  "wb"))
+                pickle.dump(x, open("pickles/{}_null_YFP_mapp_x_values_fold_{}.pk".format(plot, fold), "wb"))
+                pickle.dump(y, open("pickles/{}_null_YFP_mapp_y_values_fold_{}.pk".format(plot, fold),  "wb"))
                 null_YFP_x, null_YFP_y = x, y
             if i == 1:
-                pickle.dump(x, open("pickles/null_DAPI_mapp_x_values_fold_{}.pk".format(fold), "wb"))
-                pickle.dump(y, open("pickles/null_DAPI_mapp_y_values_fold_{}.pk".format(fold), "wb"))
+                pickle.dump(x, open("pickles/{}_null_DAPI_mapp_x_values_fold_{}.pk".format(plot, fold), "wb"))
+                pickle.dump(y, open("pickles/{}_null_DAPI_mapp_y_values_fold_{}.pk".format(plot, fold), "wb"))
                 null_DAPI_x, null_DAPI_y = x, y
             if i == 2:
-                pickle.dump(x, open("pickles/mapp_x_values_fold_{}.pk".format(fold), "wb"))
-                pickle.dump(y, open("pickles/mapp_y_values_fold_{}.pk".format(fold), "wb"))
+                pickle.dump(x, open("pickles/{}_mapp_x_values_fold_{}.pk".format(plot, fold), "wb"))
+                pickle.dump(y, open("pickles/{}_mapp_y_values_fold_{}.pk".format(plot, fold), "wb"))
                 ML_x, ML_y = x, y
             i += 1
             labels, x, y = labels[::-1], x[::-1], y[::-1]
             auc = np.trapz(y,x)
             print("AUC: ", auc)
         return ML_x, ML_y, null_YFP_x, null_YFP_y, null_DAPI_x, null_DAPI_y
+
 
 def osteosarcomaAblatedAndNonAblated(sample_size=100, validation_generator=None, model=None, fold=None, device=None):
     """
