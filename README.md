@@ -13,8 +13,14 @@ cv2 4.1.1.26 <br />
 numpy 1.16.4 <br />
 sklearn 0.21.2 <br />
 
-## Hardware Requirements:
-All deep learning models were trained using Nvidia Geforce GTX 1080 GPUs
+## Installation Instructions:
+We've included an example conda environment in this repository called transchtranschannel_conda_env.yml. To install the necessary packages, simply install conda first (https://conda.io/projects/conda/en/latest/user-guide/install/index.html), and then
+'conda env create -f transchannel_env.yml -n transchannel_env'
+to create a new conda environment from the .yml file. Install time should take just a few minutes. 
+
+## Hardware and Software Specifications:
+All deep learning models were trained using Nvidia Geforce GTX 1080 GPUs with a 64 CPU machine.
+We used a CentOS Linux operating system (version 7).
 
 ## Content:
 
@@ -61,8 +67,8 @@ This folder is where figure_generator.py saves its files <br />
 **outputs:**<br />
 This folder is a temporary directory used for saving images <br />
 
-
-
+**Demo:**<br />
+To demo the model, you can run all of the tests included in transchannel_tests.py. Computation for calculating ROC can be very intensive and takes multiple hours of compute. Tests can be run with a smaller sample size by modifying the variable 'sample_size' found in transchannel_tests.py, which determines how many images to pull from the test set. 
 
 
 
