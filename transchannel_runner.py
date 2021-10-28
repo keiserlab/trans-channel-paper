@@ -40,7 +40,7 @@ learning_rate = .001
 continue_training = False ##if we want to continue training from a pre-trained model
 if continue_training:
     load_training_name = "LOAD_MODEL_NAME.pt" #model to use if we're training from a pre-trained model
-gpu_list = [0,1] ##gpu ids to use
+gpu_list = [1,0] ##gpu ids to use
 print("GPUs to use: ", gpu_list)
 lossfn = pearsonCorrLoss 
 architecture = "unet mod"
@@ -50,6 +50,7 @@ stats = np.load(meanSTDStats)
 inputMean, inputSTD, labelMean, labelSTD, DAPIMean, DAPISTD = stats
 stats = np.load(minMaxStats)
 inputMin, inputMax, labelMin, labelMax, DAPIMin, DAPIMax = stats
+print(inputMin, inputMax, labelMin, labelMax, DAPIMin, DAPIMax )
 model = Unet_mod(inputChannels=2)
 if len(gpu_list) > 1:
     model = nn.DataParallel(model, device_ids=gpu_list).cuda()
@@ -94,12 +95,13 @@ shutil.rmtree("outputs/")
 os.mkdir("outputs/")
 
 train(continue_training=False, model=model, max_epochs=max_epochs, training_generator=training_generator, validation_generator=validation_generator, lossfn=lossfn, optimizer=optimizer, plotName="null",device=device)
-ml_model_perf, null_model_perf, ml_model_mse_perf, null_model_mse_perf = test(sample_size=1000000, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=validation_generator, lossfn=lossfn,device=device)
+ml_model_perf, null_model_perf, ml_model_mse_perf, null_model_mse_perf = test(sample_size=1000000, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=validation_generator, lossfn=lossfn,device=device, plotImages=False)
 pickle.dump(ml_model_perf, open("pickles/ml_model_perf.pkl", "wb"))
 pickle.dump(null_model_perf, open("pickles/null_model_perf.pkl", "wb"))
 pickle.dump(ml_model_mse_perf, open("pickles/ml_model_mse_perf.pkl", "wb"))
 pickle.dump(null_model_mse_perf, open("pickles/null_model_mse_perf.pkl", "wb"))
-ML_x, ML_y, null_YFP_x, null_YFP_y, null_DAPI_x, null_DAPI_y = getROC(lab_thresh=1.0, sample_size=1000000, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=validation_generator, device=device)
+getPerformanceCurve(lab_thresh=1.0, sample_size=1000000, plot="ROC", model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=validation_generator, fold=fold, device=device)
+getPerformanceCurve(lab_thresh=1.0, sample_size=1000000, plot="PRC", model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=validation_generator, fold=fold, device=device)
 
 ##Supplemental analysis
 getOverlap(sample_size=1000000, generator=full_data_generator)
@@ -133,5 +135,11 @@ pickle.dump(ml_model_perf, open("pickles/single_channel_YFP_ml_model_perf.pkl", 
 pickle.dump(null_model_perf, open("pickles/single_channel_YFP_null_model_perf.pkl", "wb"))
 pickle.dump(ml_model_mse_perf, open("pickles/single_channel_YFP_ml_model_mse_perf.pkl", "wb"))
 pickle.dump(null_model_mse_perf, open("pickles/single_channel_YFP_null_model_mse_perf.pkl", "wb"))
+
+testDataSizeRequirements(train_indices=train_indices, test_indices=test_indices, gpu_list=gpu_list, dataset=dataset, lossfn=lossfn, optimizer=optimizer, device=device, train_params=train_params, test_params=test_params)
+
+
+
+
 
 

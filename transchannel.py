@@ -343,7 +343,7 @@ def train(continue_training=False, load_training_name="None", model=None, max_ep
             print("epoch: ", epoch + 1, " global validation loss: ", running_val_loss / float(j))
     saveTraining(model, epoch, optimizer, running_loss / float(j), "models/" + plotName + ".pt")
 
-def test(sample_size=1000000, model=None, loadName=None, validation_generator=None, lossfn=None, device=None):
+def test(sample_size=1000000, model=None, loadName=None, validation_generator=None, lossfn=None, device=None, plotImages=False):
     """
     Method to run the MODEL on the test set over SAMPLE_SIZE number of images
     MODEL should be of type nn.Module, and specifies the architecture to use
@@ -376,6 +376,8 @@ def test(sample_size=1000000, model=None, loadName=None, validation_generator=No
             null_performance.append(getPearson(local_batch[:, 0, :, :], local_labels))
             null_mse_performance.append(calculateMSE(local_batch[:, 0, :, :], local_labels))
             pearson_inp_predicted.append(getPearson(local_batch[:, 0, :, :], outputs))
+            if plotImages:
+                plotInputs(local_batch, local_labels, outputs, directory="outputs/")
             if j == sample_size:
                 break
     ml_model_perf = np.mean(performance), np.std(performance)
@@ -668,7 +670,7 @@ def plotInputs(inputs, labels, predicted, directory, rand=None):
         cv2.imwrite(directory + str(rand) + "input_0.tif", inp)
         if inputs.shape[1] == 2: 
             dapi = inputs[i][1].reshape((img_dim, img_dim))
-            dapi = (dapi / 255) * inputMax
+            dapi = (dapi / 255) * 65535.0
             dapi = dapi.astype(np.uint16)
             cv2.imwrite(directory + str(rand) + "input_1.tif", dapi)
         lab = labels[i].reshape((img_dim,img_dim))
@@ -900,4 +902,21 @@ def ablationTestTau(sample_size=1000000, validation_generator=None, ablate_DAPI_
         pickle.dump(stds, open("pickles/ablation_tau_stds.pkl", "wb"))
         print("ablation: {}, global performance: avg={}, std= {}".format(a, np.mean(performance), np.std(performance)))
     
+def testDataSizeRequirements(train_indices=None, test_indices=None, gpu_list=None, dataset=None, lossfn=None, optimizer=None, device=None, train_params=None, test_params=None):
+    # for dataset_size in [.10, 0.20, 0.30, 0.40, 0.50]:
+    for dataset_size in [1.0, 0.90, 0.80, 0.70, 0.60]:
+        model = Unet_mod(inputChannels=2)
+        model = nn.DataParallel(model, device_ids=gpu_list).cuda()
+        model = model.to(device)
+        train_indices_copy = train_indices.copy()
+        random.shuffle(train_indices_copy)        
+        train_indices_copy = train_indices[0:int(dataset_size*len(train_indices))]
+        print("ratio: {}, # of training examples: {}".format(dataset_size, len(train_indices_copy)))
+        train_sampler = SubsetRandomSampler(train_indices_copy)
+        test_sampler = SubsetRandomSampler(test_indices) 
+        training_generator = data.DataLoader(dataset, sampler=train_sampler, **train_params)
+        validation_generator = data.DataLoader(dataset,sampler=test_sampler, **test_params)
+        train(continue_training=False, load_training_name="None", model=model, max_epochs=3, training_generator=training_generator, validation_generator=validation_generator, lossfn=lossfn, optimizer=optimizer, plotName="reduced_dataset_size_{}".format(dataset_size), device=device)
+
+
 
