@@ -509,35 +509,71 @@ def ablationPlot():
         tick.set_fontname("Times New Roman")
     plt.savefig("matplotlib_figures/ablation.png", dpi=300)
     
-def ROC_plot():
+def performancePlot(plot="ROC"):
     """
     for generating the ROC plot in the tauopathy model performance figure
     """
     fig, ax = plt.subplots()
-    colors = {"ML": "red", "YFP": "gold", "DAPI": "blue"}
-    x_ML_hist = pickle.load(open("pickles/mapp_x_values_fold_-1.pk", "rb"))
-    y_ML_hist = pickle.load(open("pickles/mapp_y_values_fold_-1.pk", "rb"))
-    x_null_hist = pickle.load(open("pickles/null_YFP_mapp_x_values_fold_-1.pk", "rb"))
-    y_null_hist = pickle.load(open("pickles/null_YFP_mapp_y_values_fold_-1.pk", "rb"))
-    x_null_DAPI_hist = pickle.load(open("pickles/null_DAPI_mapp_x_values_fold_-1.pk", "rb"))
-    y_null_DAPI_hist = pickle.load(open("pickles/null_DAPI_mapp_y_values_fold_-1.pk", "rb"))
-    ML_auc = -1 * np.trapz(y_ML_hist, x_ML_hist)
-    null_auc = -1 * np.trapz(y_null_hist, x_null_hist)
-    null_DAPI_auc = -1 * np.trapz(y_null_DAPI_hist, x_null_DAPI_hist)
-    ax.plot(x_ML_hist,y_ML_hist,linewidth=2.0, color=colors["ML"], label="ML Model, AUC = {}".format(str(round(ML_auc, 2))[0:4])) #rounded AUC
-    ax.plot(x_null_hist,y_null_hist,linewidth=2.0, color=colors["YFP"], label="Null YFP Model, AUC = {}".format(str(round(null_auc, 2))[0:4]))
-    ax.plot(x_null_DAPI_hist,y_null_DAPI_hist,linewidth=2.0, color=colors["DAPI"], label="Null DAPI Model, AUC = {}".format(str(round(null_DAPI_auc, 2))[0:4]))
-    plt.title("ROC Curves", fontname="Times New Roman", fontsize=12)
-    ax.set_xlabel("False Positive Rate", fontname="Times New Roman", fontsize=12)
-    ax.set_ylabel("True Positive Rate",fontname="Times New Roman", fontsize=12)
-    ax.plot([0, .5, 1], [0,.5, 1], linestyle="--", linewidth=1.0, color="black")
+    colors = {"ML": "red", "Null YFP": "gold", "Null DAPI": "blue"}
+    mapp = pickle.load(open("pickles/mapp_fold_-1.pk", "rb"))
+    null_mapp = pickle.load(open("pickles/null_YFP_mapp_fold_-1.pk", "rb"))
+    null_DAPI_mapp = pickle.load(open("pickles/null_DAPI_mapp_fold_-1.pk", "rb"))
+    
+    i = 0
+    for m in [mapp, null_mapp, null_DAPI_mapp]:
+        coordinates = [] #list of tuples (thresh, x point, y point) to plot
+        for key in m: ##for each threshold
+            TPs = sum([x[0] for x in m[key]])
+            FPs = sum([x[1] for x in m[key]])
+            TNs = sum([x[2] for x in m[key]])
+            FNs = sum([x[3] for x in m[key]])
+            if plot == "PRC":
+                x = TPs / float(TPs + FNs) #recall (TPR)
+                y = TPs / float(TPs + FPs) #precision
+            if plot == "ROC":
+                x = FPs / float(FPs + TNs) #FPR 
+                y = TPs / float(TPs + FNs) #recall (TPR)
+            if not (np.isnan(x) or np.isnan(y)): 
+                coordinates.append((key, x, y))
+        coordinates = sorted(coordinates, key=lambda x: x[0]) ##sort by threshold
+        x = [t[1] for t in coordinates][::-1]
+        y = [t[2] for t in coordinates][::-1]
+        # print(i, coordinates)
+        # thresholds = [entry[0] for entry in coordinates]
+        # for j, txt in enumerate(thresholds):
+        #     ax.annotate(txt, (x[j], y[j]), fontsize=5)
+        auc = np.trapz(y,x)
+        if i == 0:
+            label = "ML"
+        if i == 1:
+            label = "Null YFP"
+        if i == 2:
+            label = "Null DAPI" 
+        ax.plot(x, y, linewidth=2.0, color=colors[label], label="{} Model, AUC = {}".format(label, str(round(auc, 2))))   
+        i += 1
+    plt.title("{} Curves".format(plot), fontname="Times New Roman", fontsize=12)
     ax.set_xlim((0,1))
     ax.set_ylim((0,1))
-    ax.legend(loc='lower right',prop={"family":"Times New Roman", "size":10})
     plt.rc('font',family='Times New Roman')
     plt.xticks(fontname="Times New Roman", fontsize=12)
     plt.yticks(fontname="Times New Roman", fontsize=12)
-    plt.savefig("matplotlib_figures/ROC.png", dpi=300)
+    if plot == "ROC":
+        ax.set_xlabel("False Positive Rate", fontname="Times New Roman", fontsize=12)
+        ax.set_ylabel("True Positive Rate",fontname="Times New Roman", fontsize=12)
+        ax.plot([0, .5, 1], [0,.5, 1], linestyle="--", linewidth=1.0, color="black")
+        ax.legend(loc='lower right',prop={"family":"Times New Roman", "size":10})
+        plt.savefig("matplotlib_figures/ROC.png", dpi=300)
+    if plot == "PRC":
+        positives = TPs + FNs ##doesn't matter which map we use, positive prevalence independent of map 
+        total = TPs + FPs + TNs + FNs 
+        positive_prevalence = positives / float(total)
+        ax.hlines(y=positive_prevalence, xmin=0, xmax=1, linestyle="--", linewidth=1.0, color="black")
+        ax.set_xlabel("Recall", fontname="Times New Roman", fontsize=12)
+        ax.set_ylabel("Precision",fontname="Times New Roman", fontsize=12)
+        ax.set_xlim((0,1))
+        ax.set_ylim((0,1))
+        ax.legend(loc='upper right',prop={"family":"Times New Roman", "size":10})
+        plt.savefig("matplotlib_figures/PRC.png", dpi=300)
 
 def overlapPlot():
     """
@@ -559,18 +595,97 @@ def overlapPlot():
     plt.xticks(np.arange(min(x), max(x) + .25, .25))
     plt.savefig("matplotlib_figures/overlapPlot.png", dpi=300)
 
+def plotPercentageRelativeToControl():
+    """
+    Plots percentage reduction of aggregation and cell count relative to control with no compound
+    Differences are derived from 10E-6 Molar concentration
+    """
+    aggregation_and_cell_count_dict = pickle.load(open("pickles/aggregation_and_cell_count_dict_relative_to_control.pkl", "rb"))
+    categories = ["ML", "C", "both"]
+    average_aggregation_diffs = [np.mean([x[0] for x in aggregation_and_cell_count_dict[cat]]) for cat in categories]
+    average_aggregation_diff_stds = [np.std([x[0] for x in aggregation_and_cell_count_dict[cat]]) for cat in categories]
+    average_cell_count_diffs = [np.mean([x[1] for x in aggregation_and_cell_count_dict[cat]]) for cat in categories]
+    average_cell_count_diff_stds = [np.std([x[1] for x in aggregation_and_cell_count_dict[cat]]) for cat in categories]
+    sample_sizes = [len(aggregation_and_cell_count_dict[cat]) for cat in categories]
+    for metric in ["Tau Aggregation", "Cell Count"]:
+        fig, ax = plt.subplots()
+        if metric == "Tau Aggregation":
+            diffs = average_aggregation_diffs
+            stds = average_aggregation_diff_stds
+            plt.title("Potency to Reduce Tau Aggregation per Cell",fontname="Times New Roman", fontsize=14)
+        if metric == "Cell Count":
+            diffs = average_cell_count_diffs
+            stds = average_cell_count_diff_stds
+            plt.title("Potency to Reduce Cell Count",fontname="Times New Roman", fontsize=14)
+        x = list(range(1, len(categories) + 1))
+        width = .50
+        rects = ax.bar(x, diffs, width, yerr=stds, capsize=3,  error_kw=dict(lw=1, capsize=3, capthick=1), color=['red', 'gold', 'purple', 'grey'], zorder=3)
+        ax.set_ylabel("% Reduction Relative to No Drug Control".format(metric), fontname="Times New Roman", fontsize=12)
+        plt.yticks(fontname="Times New Roman", fontsize=12)
+        xlabels = ["null", "ML", "Conventional", "Both"]
+        for i in range(1, len(xlabels)):
+            xlabels[i] = xlabels[i] + "\n" + "n=" + str(sample_sizes[i - 1])     
+        ax.set_ylim((0,1))
+        ax.set_xticklabels(xlabels,fontsize=12, fontname="Times New Roman")
+        yvals = ax.get_yticks()
+        ax.set_yticklabels(['{:,.0%}'.format(y) for y in yvals], fontname="Times New Roman", fontsize=12)
+        ax.xaxis.set_major_locator(plt.MaxNLocator(len(xlabels) - 1))
+        plt.gcf().subplots_adjust(left=.135) 
+        plt.savefig("matplotlib_figures/percentage_of_control{}.png".format(metric), dpi=300)
+
+def osteoAblationPlot():
+    """
+    Plots osteo performance over different ablation thresholds, averaged over all 3 cross-validation folds
+    """
+    x = pickle.load(open("pickles/ablation_osteo_x_fold_1.pkl", "rb"))
+    y1 = pickle.load(open("pickles/ablation_osteo_y_fold_1.pkl", "rb"))
+    y2 = pickle.load(open("pickles/ablation_osteo_y_fold_2.pkl", "rb"))
+    y3 = pickle.load(open("pickles/ablation_osteo_y_fold_3.pkl", "rb"))
+    y_avg = []
+    y_std = []
+    for i in range(0, len(x)):
+        y_avg.append(np.mean(y1[i] + y2[i] + y3[i]))
+        y_std.append(np.std(y1[i] + y2[i] + y3[i]))
+
+    # sorted_pairs = sorted(zip(x, y_avg, y_std))
+    # tuples = zip(*sorted_pairs)
+    # x, y_avg, y_std = [ list(tuple) for tuple in  tuples]
+
+    fig, ax = plt.subplots()
+    plt.xlabel("Intensity Percentile of Hoechst Ablated", fontname="Times New Roman", fontsize=12)    
+    x = [val * 100 for val in x]
+    x_vals = ax.get_xticks()
+    x_vals = np.insert(x_vals, 0, 0)
+    ax.set_xticklabels(['{:,.0%}'.format(x_val) for x_val in x_vals], fontname="Times New Roman")
+    ax.axhline(.40, linestyle="--", color='black', lw=.80, alpha=0.8)
+    ax.errorbar(x, y_avg, yerr=y_std, capsize=1.5, elinewidth=.2, ecolor="black", label="ML Model")
+    ax.set_ylabel("Average Pearson Correlation Over Test Set", fontname="Times New Roman", fontsize=12)
+    plt.axis((-.02,102,0,1))
+    plt.title("Pearson Performance with Increasing Ablations", fontname="Times New Roman", fontsize=14)
+    for tick in ax.get_xticklabels():
+        tick.set_fontname("Times New Roman")
+    for tick in ax.get_yticklabels():
+        tick.set_fontname("Times New Roman")
+    plt.savefig("matplotlib_figures/ablation_osteo.png", dpi=300)
+
+
+
 ## method calls 
-performanceBarCharts()
-calculateStatisticalSignificance()
-enrichmentPlot("Strict Labeling Successful Compounds")
-enrichmentPlot("Strict Labeling Missed Successful Compounds")
-enrichmentPlot("Strict Labeling Successful Compounds - ML")
-enrichmentPlot("Strict Labeling Missed Successful Compounds - ML")
-enrichmentBoxPlot("Strict Labeling Successful Compounds")
-enrichmentBoxPlot("Strict Labeling Missed Successful Compounds")
-enrichmentBoxPlot("Strict Labeling Successful Compounds - ML")
-enrichmentBoxPlot("Strict Labeling Missed Successful Compounds - ML")
-ablationPlot()
-ROC_plot()
-overlapPlot()
-plateSeparatedPerformance()
+# performanceBarCharts()
+# calculateStatisticalSignificance()
+# enrichmentPlot("Strict Labeling Successful Compounds")
+# enrichmentPlot("Strict Labeling Missed Successful Compounds")
+# enrichmentPlot("Strict Labeling Successful Compounds - ML")
+# enrichmentPlot("Strict Labeling Missed Successful Compounds - ML")
+# enrichmentBoxPlot("Strict Labeling Successful Compounds")
+# enrichmentBoxPlot("Strict Labeling Missed Successful Compounds")
+# enrichmentBoxPlot("Strict Labeling Successful Compounds - ML")
+# enrichmentBoxPlot("Strict Labeling Missed Successful Compounds - ML")
+# ablationPlot()
+performancePlot(plot="ROC")
+performancePlot(plot="PRC")
+
+# overlapPlot()
+# plateSeparatedPerformance()
+# plotPercentageRelativeToControl()
+# osteoAblationPlot()

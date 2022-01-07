@@ -29,7 +29,7 @@ if fold in [1,2,3]:
     cross_val = True
 else:
     cross_val = False
-plotName = "MODEL_NAME".format(fold) #name used to save model 
+plotName = "MODEL_NAME_fold_{}".format(fold) #name used to save model 
 csv_name = "csvs/raw_dataset_1_thru_6_full_images_gpu2.csv" 
 meanSTDStats = "stats/raw_dataset_1_thru_6_stats.npy"
 minMaxStats = "stats/raw_1_thru_6_min_max.npy" #stats for min max values 
@@ -100,8 +100,7 @@ pickle.dump(ml_model_perf, open("pickles/ml_model_perf.pkl", "wb"))
 pickle.dump(null_model_perf, open("pickles/null_model_perf.pkl", "wb"))
 pickle.dump(ml_model_mse_perf, open("pickles/ml_model_mse_perf.pkl", "wb"))
 pickle.dump(null_model_mse_perf, open("pickles/null_model_mse_perf.pkl", "wb"))
-getPerformanceCurve(lab_thresh=1.0, sample_size=1000000, plot="ROC", model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=validation_generator, fold=fold, device=device)
-getPerformanceCurve(lab_thresh=1.0, sample_size=1000000, plot="PRC", model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=validation_generator, fold=fold, device=device)
+getPerformanceCurve(lab_thresh=1.0, sample_size=10000000, model=model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=validation_generator, fold=fold, device=device)
 
 ##Supplemental analysis
 getOverlap(sample_size=1000000, generator=full_data_generator)
@@ -136,7 +135,7 @@ pickle.dump(null_model_perf, open("pickles/single_channel_YFP_null_model_perf.pk
 pickle.dump(ml_model_mse_perf, open("pickles/single_channel_YFP_ml_model_mse_perf.pkl", "wb"))
 pickle.dump(null_model_mse_perf, open("pickles/single_channel_YFP_null_model_mse_perf.pkl", "wb"))
 
-testDataSizeRequirements(train_indices=train_indices, test_indices=test_indices, gpu_list=gpu_list, dataset=dataset, lossfn=lossfn, optimizer=optimizer, device=device, train_params=train_params, test_params=test_params)
+## testDataSizeRequirements(train_indices=train_indices, test_indices=test_indices, gpu_list=gpu_list, dataset=dataset, lossfn=lossfn, optimizer=optimizer, device=device, train_params=train_params, test_params=test_params)
 
 
 

@@ -447,7 +447,7 @@ def testOnSeparatePlates(sample_size, model=None, loadName=None, validation_gene
     pickle.dump(null_DAPI_performances, open("pickles/separatePlateTestDAPIPerformances.pkl", "wb"))
     pickle.dump(null_DAPI_stds, open("pickles/separatePlateTestDAPIStds.pkl", "wb"))
 
-def getPerformanceCurve(lab_thresh, sample_size, plot="ROC", model=None, loadName=None, validation_generator=None, fold=-1, device=None):
+def getPerformanceCurve(lab_thresh, sample_size, model=None, loadName=None, validation_generator=None, fold=-1, device=None):
     """
     LAB_THRESH is the pixel threshold that we use to binarize our label image 
     SAMPLE_SIZE specifies how many images we want to include in this analysis
@@ -458,23 +458,25 @@ def getPerformanceCurve(lab_thresh, sample_size, plot="ROC", model=None, loadNam
     FOLD specifies the fold of the cross validation (or if no cross validation, then specify fold != 1,2, or 3)
     DEVICE is the cuda device to allocate to 
     Saves ROC curves for YFP Null Model, DAPI Null Model, and the actual ML model, 
-    Pickles and returns the coordinates of the different curves, and saves to pickles/
+    Pickles the coordinates of the different curves, and saves to pickles/
     """
     checkpoint = torch.load(loadName)
     model.load_state_dict(checkpoint['model_state_dict'])
-    model.eval()
-    mapp = {} #will correspond to ML model results
+    model.eval()    
+    mapp = {} #will correspond to ML model results, key: threshold, value: list of tuples (TP, FP, TN, FN) (one tuple per image in evaluation set)
     null_mapp = {} #will correspond to Null YFP model results
     null_DAPI_mapp = {} #will correspond to Null DAPI model results
     threshs = list(np.arange(-1, -.1, .1)) #the various thresholds that we will use to binarize our predicted label images
-    threshs += list(np.arange(-.1, .1, .01))
+    threshs += list(np.arange(-.1, .1, .01)) ##would expect a lot of values close to 0 
     threshs +=  list(np.arange(.1, 1, .1)) 
     threshs +=  list(np.arange(1, 4, 1)) 
-    if plot == "ROC":
-        threshs.append(30) 
-        threshs.append(1000)
-    if plot == "PRC": ##need more granular thresholds here for PRC
-        threshs += list(range(4,18, 2))
+    threshs.append(1.5)
+    threshs += list(range(4,22, 2))
+    threshs.append(30.)
+    threshs.append(1000.)
+    threshs = [round(t,3) for t in threshs]
+    threshs.sort()
+    print(threshs)
     for t in threshs:
         mapp[t] = [] #thresh to list of (x,y) points, for ROC: (FPR, TPR), for PRC: (TPR, PPV)
         null_mapp[t] = []
@@ -484,54 +486,39 @@ def getPerformanceCurve(lab_thresh, sample_size, plot="ROC", model=None, loadNam
         for names, local_batch, local_labels in validation_generator:
             local_batch, local_labels = local_batch.to(device), local_labels.to(device)
             outputs = model(local_batch)
+            outputs = outputs.cpu().numpy()
+            local_labels = local_labels.cpu().numpy()
+            img_dim = local_labels.shape[-1] 
+            ##put images back in original space (0 to 65535 pixel value)
+            lab = local_labels[0].reshape((img_dim,img_dim))
+            pred = outputs[0].reshape((img_dim,img_dim))
+            lab = (lab / 255) * 65535.0  
+            pred = (pred / 255) * 65535.0
+            ##normalize image to have mean = 0, variance = 1
+            lmean, lstd = np.mean(lab), np.std(lab)
+            pmean, pstd = np.mean(pred), np.std(pred)
+            lab = (lab - lmean) / float(lstd)
+            pred = (pred - pmean) / float(pstd)
+            ##normalize local batch as well before computing metrics
+            local_batch = local_batch.cpu().numpy()
+            local_batch.reshape((2, img_dim,img_dim))
+            local_batch = (local_batch / 255) * 65535.0
+            local_batch = (local_batch - np.mean(local_batch)) / float(np.std(local_batch))
+
             for t in threshs:
-                TPR, TNR, PPV, NPV, FNR, FPR = getMetrics(outputs, local_labels, lab_thresh=lab_thresh, pred_thresh=t)
-                null_TPR, null_TNR, null_PPV, null_NPV, null_FNR, null_FPR = getMetrics(local_batch[:,0,:,:], local_labels, lab_thresh=lab_thresh, pred_thresh=t)
-                null_DAPI_TPR, null_DAPI_TNR, null_DAPI_PPV, null_DAPI_NPV, null_DAPI_FNR, null_DAPI_FPR = getMetrics(local_batch[:,1,:,:], local_labels, lab_thresh=lab_thresh, pred_thresh=t) #for NULL AUC
-                if plot == "ROC":
-                    mapp[t].append((FPR, TPR))
-                    null_mapp[t].append((null_FPR, null_TPR))
-                    null_DAPI_mapp[t].append((null_DAPI_FPR, null_DAPI_TPR))
-                if plot == "PRC":
-                    if math.isnan(PPV) or math.isnan(null_PPV) or math.isnan(null_DAPI_PPV): ##skip threshold if not defined, precision is N/A if no positive preds
-                        continue
-                    mapp[t].append((TPR, PPV))
-                    null_mapp[t].append((null_TPR, null_PPV))
-                    null_DAPI_mapp[t].append((null_DAPI_TPR, null_DAPI_PPV))
+                TP, FP, TN, FN = getMetrics(outputs, local_labels, lab_thresh=lab_thresh, pred_thresh=t)
+                null_TP, null_FP, null_TN, null_FN = getMetrics(local_batch[:,0,:,:], local_labels, lab_thresh=lab_thresh, pred_thresh=t)
+                null_DAPI_TP, null_DAPI_FP, null_DAPI_TN, null_DAPI_FN = getMetrics(local_batch[:,1,:,:], local_labels, lab_thresh=lab_thresh, pred_thresh=t) 
+                mapp[t].append((TP, FP, TN, FN))
+                null_mapp[t].append((null_TP, null_FP, null_TN, null_FN))
+                null_DAPI_mapp[t].append((null_DAPI_TP, null_DAPI_FP, null_DAPI_TN, null_DAPI_FN))
             j += 1
             if j > sample_size:
                 break
             print(j)
-        ##generate curves data, one per model
-        i = 0
-        for m in [null_mapp, null_DAPI_mapp, mapp]:
-            coordinates = [] #list of tuples (thresh, FPR, TPR) to plot
-            for key in m:
-                xs = [l[0] for l in m[key]]
-                ys = [l[1] for l in m[key]]
-                coordinates.append((key, np.mean(xs), np.mean(ys)))
-            coordinates = sorted(coordinates, key=lambda x: x[0])
-            labels = [t[0] for t in coordinates] 
-            x = [t[1] for t in coordinates]
-            y = [t[2] for t in coordinates]
-            if i == 0:
-                pickle.dump(x, open("pickles/{}_null_YFP_mapp_x_values_fold_{}.pk".format(plot, fold), "wb"))
-                pickle.dump(y, open("pickles/{}_null_YFP_mapp_y_values_fold_{}.pk".format(plot, fold),  "wb"))
-                null_YFP_x, null_YFP_y = x, y
-            if i == 1:
-                pickle.dump(x, open("pickles/{}_null_DAPI_mapp_x_values_fold_{}.pk".format(plot, fold), "wb"))
-                pickle.dump(y, open("pickles/{}_null_DAPI_mapp_y_values_fold_{}.pk".format(plot, fold), "wb"))
-                null_DAPI_x, null_DAPI_y = x, y
-            if i == 2:
-                pickle.dump(x, open("pickles/{}_mapp_x_values_fold_{}.pk".format(plot, fold), "wb"))
-                pickle.dump(y, open("pickles/{}_mapp_y_values_fold_{}.pk".format(plot, fold), "wb"))
-                ML_x, ML_y = x, y
-            i += 1
-            labels, x, y = labels[::-1], x[::-1], y[::-1]
-            auc = np.trapz(y,x)
-            print("AUC: ", auc)
-        return ML_x, ML_y, null_YFP_x, null_YFP_y, null_DAPI_x, null_DAPI_y
-
+    pickle.dump(mapp, open("pickles/mapp_fold_{}.pk".format(fold), "wb"))
+    pickle.dump(null_mapp, open("pickles/null_YFP_mapp_fold_{}.pk".format(fold), "wb"))
+    pickle.dump(null_DAPI_mapp, open("pickles/null_DAPI_mapp_fold_{}.pk".format(fold), "wb"))
 
 def osteosarcomaAblatedAndNonAblated(sample_size=100, validation_generator=None, model=None, fold=None, device=None):
     """
@@ -658,7 +645,6 @@ def plotInputs(inputs, labels, predicted, directory, rand=None):
     inputs = inputs.cpu().numpy()
     labels = labels.cpu().numpy()
     predicted = predicted.cpu().numpy()
-    print(inputs.shape)
     pearsons = []
     for i in range(0, len(inputs)):
         if rand is None:
@@ -683,35 +669,46 @@ def plotInputs(inputs, labels, predicted, directory, rand=None):
         corr = np.corrcoef(lab.flatten(), pred.flatten())[0][1] #pearson correlation after transformations (pearson correlations of raw images are reported in study)
         cv2.imwrite(directory + str(rand) + "predicted_AT8_pearson=" + str(corr)[0:5] + ".tif", pred)
 
-def getMetrics(predicted, labels, lab_thresh=None, pred_thresh=None):
+# def getMetrics(predicted, labels, lab_thresh=None, pred_thresh=None):
+#     """
+#     Given image tensors PREDICTED and LABELS, a LAB_THRESH threshold to binarize LABELS, and a PRED_THRESH threshold to binarize the predicted image
+#     Returns TPR, TNR, PPV, NPV, FNR, FPR for batch of images
+#     """
+#     predicted = predicted.cpu().numpy()
+#     labels = labels.cpu().numpy()
+#     img_dim = labels.shape[-1]
+#     ##put images back in original space (0 to 65535 pixel value)
+#     lab = labels[0].reshape((img_dim,img_dim))
+#     pred = predicted[0].reshape((img_dim,img_dim))
+#     lab = (lab / 255) * 65535.0  
+#     pred = (pred / 255) * 65535.0
+#     ##normalize image to have mean = 0, variance = 1
+#     lmean, lstd = np.mean(lab), np.std(lab)
+#     pmean, pstd = np.mean(pred), np.std(pred)
+#     lab = ((lab - lmean) /float(lstd))
+#     pred = ((pred - pmean) /float(pstd))
+#     true_positive = np.sum(np.where((pred >= pred_thresh) & (lab >= lab_thresh), 1, 0))
+#     true_negative = np.sum(np.where((pred < pred_thresh) & (lab < lab_thresh), 1, 0))
+#     false_positive = np.sum(np.where((pred >= pred_thresh) & (lab < lab_thresh), 1, 0))
+#     false_negative = np.sum(np.where((pred < pred_thresh) & (lab >= lab_thresh), 1, 0))  
+#     TPR = true_positive / float(true_positive + false_negative )
+#     TNR = true_negative / float(true_negative + false_positive )
+#     PPV = true_positive / float(true_positive + false_positive )
+#     NPV = true_negative / float(true_negative + false_negative )
+#     FNR = false_negative / float(false_negative + true_positive )
+#     FPR = false_positive / float(false_positive + true_negative ) 
+#     return TPR, TNR, PPV, NPV, FNR, FPR
+
+def getMetrics(pred, label, lab_thresh=None, pred_thresh=None):
     """
-    Given image tensors PREDICTED and LABELS, a LAB_THRESH threshold to binarize LABELS, and a PRED_THRESH threshold to binarize the predicted image
-    Returns TPR, TNR, PPV, NPV, FNR, FPR for batch of images
+    Given image tensors PREDICTED and LABEL, a LAB_THRESH threshold to binarize LABELS, and a PRED_THRESH threshold to binarize the predicted image
+    Returns true_positive, false_positive, true_negative, false_negative
     """
-    predicted = predicted.cpu().numpy()
-    labels = labels.cpu().numpy()
-    img_dim = labels.shape[-1]
-    ##put images back in original space (0 to 65535 pixel value)
-    lab = labels[0].reshape((img_dim,img_dim))
-    pred = predicted[0].reshape((img_dim,img_dim))
-    lab = (lab / 255) * 65535.0  
-    pred = (pred / 255) * 65535.0
-    ##normalize image to have mean = 0, variance = 1
-    lmean, lstd = np.mean(lab), np.std(lab)
-    pmean, pstd = np.mean(pred), np.std(pred)
-    lab = ((lab - lmean) /float(lstd))
-    pred = ((pred - pmean) /float(pstd))
-    true_positive = np.sum(np.where((pred >= pred_thresh) & (lab >= lab_thresh), 1, 0))
-    true_negative = np.sum(np.where((pred < pred_thresh) & (lab < lab_thresh), 1, 0))
-    false_positive = np.sum(np.where((pred >= pred_thresh) & (lab < lab_thresh), 1, 0))
-    false_negative = np.sum(np.where((pred < pred_thresh) & (lab >= lab_thresh), 1, 0))  
-    TPR = true_positive / float(true_positive + false_negative )
-    TNR = true_negative / float(true_negative + false_positive )
-    PPV = true_positive / float(true_positive + false_positive )
-    NPV = true_negative / float(true_negative + false_negative )
-    FNR = false_negative / float(false_negative + true_positive )
-    FPR = false_positive / float(false_positive + true_negative ) 
-    return TPR, TNR, PPV, NPV, FNR, FPR
+    true_positive = np.sum(np.where((pred >= pred_thresh) & (label >= lab_thresh), 1, 0))
+    true_negative = np.sum(np.where((pred < pred_thresh) & (label < lab_thresh), 1, 0))
+    false_positive = np.sum(np.where((pred >= pred_thresh) & (label < lab_thresh), 1, 0))
+    false_negative = np.sum(np.where((pred < pred_thresh) & (label >= lab_thresh), 1, 0))  
+    return true_positive, false_positive, true_negative, false_negative
 
 def findStats(validation_generator, device):
     """
@@ -719,7 +716,6 @@ def findStats(validation_generator, device):
     """
     start_time = time.time()
     total_step = len(validation_generator)
-    print("test size: ", total_step)
     j = 0
     input_stats = [] #list of (mean, std)
     label_stats = [] 
@@ -839,7 +835,7 @@ class TauAblationDataset(Dataset):
 
 def ablationTestTau(sample_size=1000000, validation_generator=None, ablate_DAPI_only=False, model=None, loadName=None, device=None):
     """
-    SAMPLE_SIZE is the number of images to evaluate from the VALIDATION_GENERATOR
+    SAMPLE_SIZE is the maximum number of images to evaluate from the VALIDATION_GENERATOR
     VALIDATION_GENERATOR is the generator that iterates over validation/test images to evaluate
     If ABLATE_DAPI_ONLY, then will only ablate the DAPI input and leave YFP-tau alone 
     MODEL specifies which architecture to use
@@ -902,8 +898,48 @@ def ablationTestTau(sample_size=1000000, validation_generator=None, ablate_DAPI_
         pickle.dump(stds, open("pickles/ablation_tau_stds.pkl", "wb"))
         print("ablation: {}, global performance: avg={}, std= {}".format(a, np.mean(performance), np.std(performance)))
     
+def ablationTestOsteo(sample_size=1000000, test_sampler=None, model=None, loadName=None, device=None, test_params=None, fold=None):
+    """
+    SAMPLE_SIZE is the maximum number of images to evaluate from the VALIDATION_GENERATOR
+    TEST_SAMPLER is a PyTorch sampler 
+    MODEL specifies which architecture to use
+    LOADNAME is the name of the model to load and evaluate 
+    DEVICE is the cuda device to allocate to
+    TEST_PARAMS is a dictionary containing test parameters like batch_size and num_workers
+    FOLD is the cross-validation fold, used for book-keeping
+    pickles the results of progressively ablating the Hoechst input, running ablated input through model, and comparing prediction to label
+    """
+    ablations = list(np.arange(.1, 1.1, .1))
+    ablations += list(np.arange(.92, 1.0, .02))
+    ablations.sort()
+    x = []
+    y = []
+    start_time = time.time()
+    checkpoint = torch.load(loadName)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    model.eval()
+    for a in ablations:
+        performance = []
+        dataset = OsteosarcomaAblationDataset("csvs/cyclin_dataset.csv", "/srv/nas/mk1/users/dwong/tifs/", a)
+        validation_generator = data.DataLoader(dataset, sampler=test_sampler, **test_params)
+        total_step = len(validation_generator)
+        j = 0
+        with torch.set_grad_enabled(False):
+            for names, local_batch, local_labels in validation_generator:
+                local_batch, local_labels = local_batch.to(device), local_labels.to(device)
+                j += 1  
+                outputs = model(local_batch)
+                pearson = getPearson(outputs, local_labels)
+                if j == sample_size:
+                    break
+                performance.append(pearson) 
+        x.append(a)
+        y.append(performance) ##list of performances, dont average yet because want to report over all cross-validations
+        pickle.dump(x, open("pickles/ablation_osteo_x_fold_{}.pkl".format(fold), "wb"))
+        pickle.dump(y, open("pickles/ablation_osteo_y_fold_{}.pkl".format(fold), "wb"))
+        print("ablation: {}, global performance: avg={}, std= {}".format(a, np.mean(performance), np.std(performance)))
+    
 def testDataSizeRequirements(train_indices=None, test_indices=None, gpu_list=None, dataset=None, lossfn=None, optimizer=None, device=None, train_params=None, test_params=None):
-    # for dataset_size in [.10, 0.20, 0.30, 0.40, 0.50]:
     for dataset_size in [1.0, 0.90, 0.80, 0.70, 0.60]:
         model = Unet_mod(inputChannels=2)
         model = nn.DataParallel(model, device_ids=gpu_list).cuda()

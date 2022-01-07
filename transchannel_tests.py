@@ -40,30 +40,20 @@ class HelperFunctionsTests(unittest.TestCase):
 
     def testGetMetrics(self):
         """
-        test the getMetrics() function's correctness for TPR, TNR, PPV, NPV, FNR, FPR
+        test the getMetrics() function's correctness
         """
         ## case with nonzero true positives, true negatives, and false negatives
-        actual = torch.FloatTensor(np.array([[[.99, .99], [.98, .98]]]))
-        predicted = torch.FloatTensor(np.array([[[1.1, 1.0],[1.0, 1.0]]]))
-        self.assertEqual(getMetrics(predicted, actual, lab_thresh=.97, pred_thresh=.97), (0.5, 1.0, 1.0, 0.6666666666666666, 0.5, 0.0))  #TPR, TNR, PPV, NPV, FNR, FPR
+        actual = torch.FloatTensor(np.array([[[1.1, 1.1], [0, .99]]]))
+        predicted = torch.FloatTensor(np.array([[[1.05, .99],[.99, 1.1]]]))
+        self.assertEqual(getMetrics(predicted, actual, lab_thresh=1, pred_thresh=1), (1, 1, 1, 1)) # true_positive, false_positive, true_negative, false_negative
         ## all true negatives case, no positives
-        actual = torch.FloatTensor(np.array([[[1.0, 255], [255, 255]]]))
-        predicted = torch.FloatTensor(np.array([[[1.0, 255],[255, 255]]]))
-        metrics = getMetrics(predicted, actual, lab_thresh=.97, pred_thresh=.97) 
-        self.assertTrue(math.isnan(metrics[0]))
-        self.assertEqual(metrics[1], 1.0)
-        self.assertTrue(math.isnan(metrics[2]))
-        self.assertEqual(metrics[3], 1.0)
-        self.assertTrue(math.isnan(metrics[4]))
-        self.assertEqual(metrics[5], 0)
+        actual = torch.FloatTensor(np.array([[[1.0, 1.9], [1.9, 1.9]]]))
+        predicted = torch.FloatTensor(np.array([[[1.0, 1.9],[1.9, 1.9]]]))
+        metrics = getMetrics(predicted, actual, lab_thresh=2.0, pred_thresh=2.0)
+        self.assertEqual(metrics, (0, 0, 4, 0))
         ## all true positives case, no negatives
         metrics = getMetrics(predicted, actual, lab_thresh=-100, pred_thresh=-100) 
-        self.assertEqual(metrics[0], 1.0)
-        self.assertTrue(math.isnan(metrics[1]))
-        self.assertEqual(metrics[2], 1.0)
-        self.assertTrue(math.isnan(metrics[3]))
-        self.assertEqual(metrics[4], 0)
-        self.assertTrue(math.isnan(metrics[5]))
+        self.assertEqual(metrics, (4, 0, 0, 0))
 
 class MainFunctionsTests(unittest.TestCase):
     """
@@ -115,32 +105,25 @@ class MainFunctionsTests(unittest.TestCase):
         """
         self.assertEqual(len(set(self.train_indices).intersection(self.test_indices)), 0) 
 
-    def testGetROC(self):
+    def testROCAndPRC(self):
         """
-        test the method getROC()
+        test the performance curve results for validity 
         """
-        ML_x, ML_y, null_YFP_x, null_YFP_y, null_DAPI_x, null_DAPI_y = getPerformanceCurve(lab_thresh=1.0, sample_size=sample_size, model=self.model, loadName="models/raw_1_thru_6_full_Unet_mod_continue_training_2.pt", validation_generator=self.validation_generator, device=self.device)
-        ## make sure return is in expected, sorted form 
-        self.assertTrue(ML_x == sorted(ML_x, reverse=True))
-        self.assertTrue(null_YFP_x == sorted(null_YFP_x, reverse=True))
-        self.assertTrue(null_DAPI_x == sorted(null_DAPI_x, reverse=True))
-        self.assertTrue(ML_y == sorted(ML_y, reverse=True))
-        self.assertTrue(null_YFP_y == sorted(null_YFP_y, reverse=True))
-        self.assertTrue(null_DAPI_y == sorted(null_DAPI_y, reverse=True))
-        ## make sure return is well shaped and of same lengths 
-        self.assertTrue(len(ML_x) == len(ML_y) == len(null_YFP_x) == len(null_YFP_y) == len(null_DAPI_x) == len(null_YFP_y))
-        ## make sure in right data range [0, 1] inclusive 
-        self.assertTrue(all(0.0 <= element <= 1.0 for element in ML_x))
-        self.assertTrue(all(0.0 <= element <= 1.0 for element in ML_y))
-        self.assertTrue(all(0.0 <= element <= 1.0 for element in null_YFP_x))
-        self.assertTrue(all(0.0 <= element <= 1.0 for element in null_YFP_y))
-        self.assertTrue(all(0.0 <= element <= 1.0 for element in null_DAPI_x))
-        self.assertTrue(all(0.0 <= element <= 1.0 for element in null_DAPI_y)) 
-        ## make sure  null DAPI performance < null YFP performance < ML performance 
-        ML_auc = -1 * np.trapz(ML_y, ML_x)
-        null_auc = -1 * np.trapz(null_YFP_y, null_YFP_x)
-        null_DAPI_auc = -1 * np.trapz(null_DAPI_y, null_DAPI_x)
-        self.assertTrue(null_DAPI_auc < null_auc < ML_auc)
+        mapp = pickle.load(open("pickles/mapp_fold_-1.pk", "rb"))
+        null_mapp = pickle.load(open("pickles/null_YFP_mapp_fold_-1.pk", "rb"))
+        null_DAPI_mapp = pickle.load(open("pickles/null_DAPI_mapp_fold_-1.pk", "rb"))
+        for m in [mapp, null_mapp, null_DAPI_mapp]:
+            for key in m: 
+                TPs = sum([x[0] for x in m[key]])
+                FPs = sum([x[1] for x in m[key]])
+                TNs = sum([x[2] for x in m[key]])
+                FNs = sum([x[3] for x in m[key]])
+                positives = TPs + FNs 
+                total = TPs + FPs + TNs + FNs 
+                num_images = len(m[key])
+                positive_prevalence = positives / float(total)
+                self.assertTrue(num_images * 2048 * 2048 == total) ##make sure we are accounting for each pixel 
+                self.assertTrue(num_images == 17280) ##make sure every image in test set is accounted for 
 
 class DatasetTests(unittest.TestCase):
     """
@@ -271,5 +254,6 @@ class ArchitectureTests(unittest.TestCase):
         self.assertEqual(total_params -(512*512*2*2) - 512,3814401) ##left in an unused param, historic artifact
 
 
-sample_size = 1000000
+sample_size = 1000000000
 unittest.main()
+
