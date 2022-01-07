@@ -669,36 +669,6 @@ def plotInputs(inputs, labels, predicted, directory, rand=None):
         corr = np.corrcoef(lab.flatten(), pred.flatten())[0][1] #pearson correlation after transformations (pearson correlations of raw images are reported in study)
         cv2.imwrite(directory + str(rand) + "predicted_AT8_pearson=" + str(corr)[0:5] + ".tif", pred)
 
-# def getMetrics(predicted, labels, lab_thresh=None, pred_thresh=None):
-#     """
-#     Given image tensors PREDICTED and LABELS, a LAB_THRESH threshold to binarize LABELS, and a PRED_THRESH threshold to binarize the predicted image
-#     Returns TPR, TNR, PPV, NPV, FNR, FPR for batch of images
-#     """
-#     predicted = predicted.cpu().numpy()
-#     labels = labels.cpu().numpy()
-#     img_dim = labels.shape[-1]
-#     ##put images back in original space (0 to 65535 pixel value)
-#     lab = labels[0].reshape((img_dim,img_dim))
-#     pred = predicted[0].reshape((img_dim,img_dim))
-#     lab = (lab / 255) * 65535.0  
-#     pred = (pred / 255) * 65535.0
-#     ##normalize image to have mean = 0, variance = 1
-#     lmean, lstd = np.mean(lab), np.std(lab)
-#     pmean, pstd = np.mean(pred), np.std(pred)
-#     lab = ((lab - lmean) /float(lstd))
-#     pred = ((pred - pmean) /float(pstd))
-#     true_positive = np.sum(np.where((pred >= pred_thresh) & (lab >= lab_thresh), 1, 0))
-#     true_negative = np.sum(np.where((pred < pred_thresh) & (lab < lab_thresh), 1, 0))
-#     false_positive = np.sum(np.where((pred >= pred_thresh) & (lab < lab_thresh), 1, 0))
-#     false_negative = np.sum(np.where((pred < pred_thresh) & (lab >= lab_thresh), 1, 0))  
-#     TPR = true_positive / float(true_positive + false_negative )
-#     TNR = true_negative / float(true_negative + false_positive )
-#     PPV = true_positive / float(true_positive + false_positive )
-#     NPV = true_negative / float(true_negative + false_negative )
-#     FNR = false_negative / float(false_negative + true_positive )
-#     FPR = false_positive / float(false_positive + true_negative ) 
-#     return TPR, TNR, PPV, NPV, FNR, FPR
-
 def getMetrics(pred, label, lab_thresh=None, pred_thresh=None):
     """
     Given image tensors PREDICTED and LABEL, a LAB_THRESH threshold to binarize LABELS, and a PRED_THRESH threshold to binarize the predicted image

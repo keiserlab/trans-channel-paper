@@ -595,44 +595,6 @@ def overlapPlot():
     plt.xticks(np.arange(min(x), max(x) + .25, .25))
     plt.savefig("matplotlib_figures/overlapPlot.png", dpi=300)
 
-def plotPercentageRelativeToControl():
-    """
-    Plots percentage reduction of aggregation and cell count relative to control with no compound
-    Differences are derived from 10E-6 Molar concentration
-    """
-    aggregation_and_cell_count_dict = pickle.load(open("pickles/aggregation_and_cell_count_dict_relative_to_control.pkl", "rb"))
-    categories = ["ML", "C", "both"]
-    average_aggregation_diffs = [np.mean([x[0] for x in aggregation_and_cell_count_dict[cat]]) for cat in categories]
-    average_aggregation_diff_stds = [np.std([x[0] for x in aggregation_and_cell_count_dict[cat]]) for cat in categories]
-    average_cell_count_diffs = [np.mean([x[1] for x in aggregation_and_cell_count_dict[cat]]) for cat in categories]
-    average_cell_count_diff_stds = [np.std([x[1] for x in aggregation_and_cell_count_dict[cat]]) for cat in categories]
-    sample_sizes = [len(aggregation_and_cell_count_dict[cat]) for cat in categories]
-    for metric in ["Tau Aggregation", "Cell Count"]:
-        fig, ax = plt.subplots()
-        if metric == "Tau Aggregation":
-            diffs = average_aggregation_diffs
-            stds = average_aggregation_diff_stds
-            plt.title("Potency to Reduce Tau Aggregation per Cell",fontname="Times New Roman", fontsize=14)
-        if metric == "Cell Count":
-            diffs = average_cell_count_diffs
-            stds = average_cell_count_diff_stds
-            plt.title("Potency to Reduce Cell Count",fontname="Times New Roman", fontsize=14)
-        x = list(range(1, len(categories) + 1))
-        width = .50
-        rects = ax.bar(x, diffs, width, yerr=stds, capsize=3,  error_kw=dict(lw=1, capsize=3, capthick=1), color=['red', 'gold', 'purple', 'grey'], zorder=3)
-        ax.set_ylabel("% Reduction Relative to No Drug Control".format(metric), fontname="Times New Roman", fontsize=12)
-        plt.yticks(fontname="Times New Roman", fontsize=12)
-        xlabels = ["null", "ML", "Conventional", "Both"]
-        for i in range(1, len(xlabels)):
-            xlabels[i] = xlabels[i] + "\n" + "n=" + str(sample_sizes[i - 1])     
-        ax.set_ylim((0,1))
-        ax.set_xticklabels(xlabels,fontsize=12, fontname="Times New Roman")
-        yvals = ax.get_yticks()
-        ax.set_yticklabels(['{:,.0%}'.format(y) for y in yvals], fontname="Times New Roman", fontsize=12)
-        ax.xaxis.set_major_locator(plt.MaxNLocator(len(xlabels) - 1))
-        plt.gcf().subplots_adjust(left=.135) 
-        plt.savefig("matplotlib_figures/percentage_of_control{}.png".format(metric), dpi=300)
-
 def osteoAblationPlot():
     """
     Plots osteo performance over different ablation thresholds, averaged over all 3 cross-validation folds
@@ -686,5 +648,4 @@ performancePlot(plot="ROC")
 performancePlot(plot="PRC")
 overlapPlot()
 plateSeparatedPerformance()
-plotPercentageRelativeToControl()
 osteoAblationPlot()

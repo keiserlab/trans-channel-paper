@@ -135,7 +135,6 @@ pickle.dump(null_model_perf, open("pickles/single_channel_YFP_null_model_perf.pk
 pickle.dump(ml_model_mse_perf, open("pickles/single_channel_YFP_ml_model_mse_perf.pkl", "wb"))
 pickle.dump(null_model_mse_perf, open("pickles/single_channel_YFP_null_model_mse_perf.pkl", "wb"))
 
-## testDataSizeRequirements(train_indices=train_indices, test_indices=test_indices, gpu_list=gpu_list, dataset=dataset, lossfn=lossfn, optimizer=optimizer, device=device, train_params=train_params, test_params=test_params)
 
 
 
