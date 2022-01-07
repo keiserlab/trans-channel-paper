@@ -88,21 +88,21 @@ os.mkdir("outputs/")
 #=======================================================================================
 #=======================================================================================
 
-# train(continue_training=False, model=model, max_epochs=max_epochs, training_generator=training_generator, validation_generator=validation_generator, lossfn=lossfn, optimizer=optimizer, plotName="null",device=device)
-# if task == "raw":
-#     ml_model_perf, null_model_perf, ml_model_mse_perf, null_model_mse_perf = test(sample_size=10000000, model=model, loadName="models/d0_to_d1_cyclin_only_dataset_fold{}.pt".format(fold), validation_generator=validation_generator, lossfn=lossfn,device=device)
-#     pickle.dump(ml_model_perf, open("pickles/osteo_ml_model_perf_fold_{}.pkl".format(fold), "wb"))
-#     pickle.dump(null_model_perf, open("pickles/osteo_null_model_perf_fold_{}.pkl".format(fold), "wb"))
-#     pickle.dump(ml_model_mse_perf, open("pickles/osteo_ml_model_mse_perf_fold_{}.pkl".format(fold), "wb"))
-#     pickle.dump(null_model_mse_perf, open("pickles/osteo_null_model_mse_perf_fold_{}.pkl".format(fold), "wb"))
+train(continue_training=False, model=model, max_epochs=max_epochs, training_generator=training_generator, validation_generator=validation_generator, lossfn=lossfn, optimizer=optimizer, plotName="null",device=device)
+if task == "raw":
+    ml_model_perf, null_model_perf, ml_model_mse_perf, null_model_mse_perf = test(sample_size=10000000, model=model, loadName="models/d0_to_d1_cyclin_only_dataset_fold{}.pt".format(fold), validation_generator=validation_generator, lossfn=lossfn,device=device)
+    pickle.dump(ml_model_perf, open("pickles/osteo_ml_model_perf_fold_{}.pkl".format(fold), "wb"))
+    pickle.dump(null_model_perf, open("pickles/osteo_null_model_perf_fold_{}.pkl".format(fold), "wb"))
+    pickle.dump(ml_model_mse_perf, open("pickles/osteo_ml_model_mse_perf_fold_{}.pkl".format(fold), "wb"))
+    pickle.dump(null_model_mse_perf, open("pickles/osteo_null_model_mse_perf_fold_{}.pkl".format(fold), "wb"))
 
 if task == "ablation":
-#     ml_model_perf, null_model_perf, ml_model_mse_perf, null_model_mse_perf = test(sample_size=10000000, model=model, loadName="models/d0_to_d1_ablation_cyclin_only_dataset_fold{}_continue_training.pt".format(fold), validation_generator=validation_generator, lossfn=lossfn,device=device)
-#     pickle.dump(ml_model_perf, open("pickles/osteo_ablated_ml_model_perf_fold_{}.pkl".format(fold), "wb"))
-#     pickle.dump(null_model_perf, open("pickles/osteo_ablated_null_model_perf_fold_{}.pkl".format(fold), "wb"))
-#     pickle.dump(ml_model_mse_perf, open("pickles/osteo_ablated_ml_model_mse_perf_fold_{}.pkl".format(fold), "wb"))
-#     pickle.dump(null_model_mse_perf, open("pickles/osteo_ablated_null_model_mse_perf_fold_{}.pkl".format(fold), "wb"))
-    # osteosarcomaAblatedAndNonAblated(sample_size=10000000, validation_generator=validation_generator, model=model, fold=fold, device=device)
+    ml_model_perf, null_model_perf, ml_model_mse_perf, null_model_mse_perf = test(sample_size=10000000, model=model, loadName="models/d0_to_d1_ablation_cyclin_only_dataset_fold{}_continue_training.pt".format(fold), validation_generator=validation_generator, lossfn=lossfn,device=device)
+    pickle.dump(ml_model_perf, open("pickles/osteo_ablated_ml_model_perf_fold_{}.pkl".format(fold), "wb"))
+    pickle.dump(null_model_perf, open("pickles/osteo_ablated_null_model_perf_fold_{}.pkl".format(fold), "wb"))
+    pickle.dump(ml_model_mse_perf, open("pickles/osteo_ablated_ml_model_mse_perf_fold_{}.pkl".format(fold), "wb"))
+    pickle.dump(null_model_mse_perf, open("pickles/osteo_ablated_null_model_mse_perf_fold_{}.pkl".format(fold), "wb"))
+    osteosarcomaAblatedAndNonAblated(sample_size=10000000, validation_generator=validation_generator, model=model, fold=fold, device=device)
     ablationTestOsteo(sample_size=1000000, test_sampler=test_sampler, model=model, loadName="models/d0_to_d1_ablation_cyclin_only_dataset_fold{}_continue_training.pt".format(fold), device=device, test_params=test_params, fold=fold)
 
 
