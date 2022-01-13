@@ -367,6 +367,11 @@ def enrichmentPlot(labelScheme):
     """
     fig, ax = plt.subplots()
     x1 = range(0, 1600)
+    cellProfilerHits = pickle.load(open("pickles/CellProfilerRanks.pkl", "rb"))
+    cell_profiler_fraction = float(1/len(cellProfilerHits))
+    if "Missed" in labelScheme:
+        cellProfilerHits = [x for x in cellProfilerHits if x > 40]
+
     if labelScheme == "Strict Labeling Successful Compounds":
         plt.title("Enrichment Plot for Triaging Active Compounds", fontname="Times New Roman", fontsize=14)
         historic_hits = pickle.load(open("pickles/historic_hits_conventional_standard.pkl", "rb"))
@@ -407,13 +412,25 @@ def enrichmentPlot(labelScheme):
         if j in ML_hits:
             cumulative_summation += ML_fraction
         ML_plot.append(cumulative_summation)
+    cumulative_summation = 0
+    cell_profiler_plot = []
+    for j in range(0, 1600):
+        if j in cellProfilerHits:
+            cumulative_summation += cell_profiler_fraction
+        cell_profiler_plot.append(cumulative_summation)
+
     x1 = np.arange(0, 1, float(1/1600))
     hist_AUC = np.trapz(historic_plot, x1)
     print("HIST AUC: ", hist_AUC)
     ML_AUC = np.trapz(ML_plot, x1)
     print("ML AUC: ", ML_AUC)
+    cell_profiler_AUC = np.trapz(cell_profiler_plot, x1)
+    print("cellProfiler AUC: ", cell_profiler_AUC)
+
     ax.plot(x1, ML_plot, color = "red", label="ML Method, AUC = " + str(round(ML_AUC, 2)))
     ax.plot(x1, historic_plot, color = "blue", label="Conventional Method, AUC = " + str(round(hist_AUC, 2)))
+    ax.plot(x1, cell_profiler_plot, color = "purple", label="CellProfiler, AUC = " + str(round(cell_profiler_AUC, 2)))
+    
     ax.set_xlabel("Ranked Queue Percentage", fontname="Times New Roman", fontsize=12)
     ax.set_ylabel("Percentage of Successful Compounds Discovered", fontname="Times New Roman", fontsize=12)
     plt.legend(loc='lower right', prop={"family":"Times New Roman", "size":10})
@@ -602,12 +619,12 @@ def osteoAblationPlot():
     x = pickle.load(open("pickles/ablation_osteo_x_fold_1.pkl", "rb"))
     y1 = pickle.load(open("pickles/ablation_osteo_y_fold_1.pkl", "rb"))
     y2 = pickle.load(open("pickles/ablation_osteo_y_fold_2.pkl", "rb"))
-    y3 = pickle.load(open("pickles/ablation_osteo_y_fold_3.pkl", "rb"))
+    # y3 = pickle.load(open("pickles/ablation_osteo_y_fold_3.pkl", "rb"))
     y_avg = []
     y_std = []
     for i in range(0, len(x)):
-        y_avg.append(np.mean(y1[i] + y2[i] + y3[i]))
-        y_std.append(np.std(y1[i] + y2[i] + y3[i]))
+        y_avg.append(np.mean(y1[i] + y2[i]))# + y3[i]))
+        y_std.append(np.std(y1[i] + y2[i]))# + y3[i]))
 
     # sorted_pairs = sorted(zip(x, y_avg, y_std))
     # tuples = zip(*sorted_pairs)
@@ -619,7 +636,7 @@ def osteoAblationPlot():
     x_vals = ax.get_xticks()
     x_vals = np.insert(x_vals, 0, 0)
     ax.set_xticklabels(['{:,.0%}'.format(x_val) for x_val in x_vals], fontname="Times New Roman")
-    ax.axhline(.40, linestyle="--", color='black', lw=.80, alpha=0.8)
+    ax.axhline(.44, linestyle="--", color='black', lw=.80, alpha=0.8)
     ax.errorbar(x, y_avg, yerr=y_std, capsize=1.5, elinewidth=.2, ecolor="black", label="ML Model")
     ax.set_ylabel("Average Pearson Correlation Over Test Set", fontname="Times New Roman", fontsize=12)
     plt.axis((-.02,102,0,1))
@@ -633,8 +650,8 @@ def osteoAblationPlot():
 
 
 ## method calls 
-performanceBarCharts()
-calculateStatisticalSignificance()
+# performanceBarCharts()
+# calculateStatisticalSignificance()
 enrichmentPlot("Strict Labeling Successful Compounds")
 enrichmentPlot("Strict Labeling Missed Successful Compounds")
 enrichmentPlot("Strict Labeling Successful Compounds - ML")
@@ -643,9 +660,9 @@ enrichmentBoxPlot("Strict Labeling Successful Compounds")
 enrichmentBoxPlot("Strict Labeling Missed Successful Compounds")
 enrichmentBoxPlot("Strict Labeling Successful Compounds - ML")
 enrichmentBoxPlot("Strict Labeling Missed Successful Compounds - ML")
-ablationPlot()
-performancePlot(plot="ROC")
-performancePlot(plot="PRC")
-overlapPlot()
-plateSeparatedPerformance()
+# ablationPlot()
+# performancePlot(plot="ROC")
+# performancePlot(plot="PRC")
+# overlapPlot()
+# plateSeparatedPerformance()
 osteoAblationPlot()
